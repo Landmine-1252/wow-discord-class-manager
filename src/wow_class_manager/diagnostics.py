@@ -6,7 +6,7 @@ import discord
 
 from . import __version__
 from .config import Settings
-from .roles import api_problem, unsafe_reason
+from .roles import UserError, api_problem, require_bot_member, unsafe_reason
 from .storage import Store
 from .ui import missing_channel_permissions
 
@@ -26,10 +26,10 @@ async def inspect_guild(
 ) -> GuildCheck:
     """Read roles and the saved panel without scanning or modifying members."""
     check = GuildCheck()
-    if guild.me is None:
-        check.warnings.append(
-            "The bot's membership in this server is unavailable. Enable Guild Install in the Discord Developer Portal and invite the same application with bot and applications.commands scopes. If just invited, wait briefly and retry."
-        )
+    try:
+        require_bot_member(guild)
+    except UserError as error:
+        check.warnings.append(str(error))
         check.panel_state = "unverified"
         return check
     check.manage_roles = bool(guild.me and guild.me.guild_permissions.manage_roles)

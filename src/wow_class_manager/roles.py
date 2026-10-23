@@ -13,6 +13,10 @@ from .storage import Store
 class UserError(RuntimeError):
     """Actionable, secret-free message safe to send to an interaction."""
 
+    def __init__(self, message: str, *, code: str = "request_rejected") -> None:
+        super().__init__(message)
+        self.code = code
+
 
 class Locks:
     def __init__(self) -> None:
@@ -42,15 +46,27 @@ def require_guild(settings: Settings, guild: discord.Guild | None) -> discord.Gu
     return guild
 
 
-def require_bot_member(guild: discord.Guild) -> None:
-    # Interactions can supply a partial Guild even when only application commands
-    # were installed. discord.py always caches the bot's own member when joined.
-    if guild.me is None:
+def require_bot_member(
+    guild: discord.Guild, *, client: discord.Client | None = None
+) -> None:
+    # discord.py can fabricate guild.me for a commands-only installation. Require
+    # Gateway membership for interactions and real guild role data in all paths.
+    if (
+        (client is not None and client.get_guild(guild.id) is None)
+        or guild.me is None
+        or guild.default_role is None
+    ):
         raise UserError(
             "The bot's membership in this server is not available. An administrator "
             "should install this application using Guild Install with both bot and "
             "applications.commands scopes. If it was just invited, wait for it to "
-            "connect and try again. The container token must belong to that same application."
+            "connect and try again. The container token must belong to that same application.",
+            code="bot_not_installed",
+        )
+    if guild.unavailable:
+        raise UserError(
+            "Discord reports this server temporarily unavailable. Wait for the bot to reconnect and try again.",
+            code="guild_unavailable",
         )
 
 

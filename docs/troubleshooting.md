@@ -16,6 +16,8 @@ Global registration is valid. If you expected guild-scoped registration, set bot
 
 ## Setup reports a missing Discord resource
 
+The Developer Portal's **Bot → Bot Permissions** section calculates a permissions integer; it does not save or grant the bot's server permissions. This bot's required integer is `268520448`. Configure **Installation → Guild Install → Default Install Settings**, then open the installation link and finish authorization. Verify actual permissions in Discord under **Server Settings → Roles** and the target channel's permission settings.
+
 Older logs containing only `error_type=NotFound` cannot identify the missing resource. That exception can represent an unknown guild, channel, message or expired interaction; it does not prove that a panel was deleted. Current error logs include the HTTP status, Discord error code and operation so the next failure can be distinguished without exposing request bodies or credentials.
 
 | Discord code | What to check |
@@ -28,6 +30,8 @@ Older logs containing only `error_type=NotFound` cannot identify the missing res
 | `50001` / `50013` — Missing Access / Permissions | Check server installation, channel visibility, Manage Roles and role hierarchy. |
 
 These codes are defined in [Discord's error-code reference](https://docs.discord.com/developers/topics/opcodes-and-status-codes#json). Share the safe event/code fields and the action you attempted when reporting a problem, never a token or full interaction payload.
+
+If you can post in the channel but an older image reports that you need View Channel/Send Messages, check whether the bot has actually joined the server. Discord can supply a partial server and placeholder bot member for a commands-only installation, making a local permission calculation misleading. Current versions verify Gateway membership and use Discord's resolved permissions for the command's channel. Explicit channel selection can fail before setup with `TransformerError` when the channel is not cached; the bot now explains installation or channel-access checks. Validation denials produce `interaction_rejected` logs with a safe reason code, without member details or request contents.
 
 ## First-time setup says there are no registered characters
 

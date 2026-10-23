@@ -81,6 +81,7 @@ def http_error(kind=discord.Forbidden):
 class FakeGuild:
     def __init__(self, guild_id=123):
         self.id = guild_id
+        self.unavailable = False
         self.roles = [FakeRole(1, "@everyone", 0)]
         self.me = SimpleNamespace(
             id=900,
@@ -93,6 +94,10 @@ class FakeGuild:
         self.fetch_member = AsyncMock(side_effect=self._fetch_member)
         self.create_role = AsyncMock(side_effect=self._create_role)
         self.fetch_channel = AsyncMock(side_effect=self._fetch_channel)
+
+    @property
+    def default_role(self):
+        return self.roles[0] if self.roles else None
 
     async def _create_role(self, **kwargs):
         role = FakeRole(
@@ -187,10 +192,13 @@ def interaction(guild, member, channel=None, *, admin=False):
     value = MagicMock(spec=discord.Interaction)
     value.type = discord.InteractionType.application_command
     value.guild, value.guild_id = guild, guild.id
+    value.client.get_guild.return_value = guild
     value.user = member
     value.channel = channel
     value.channel_id = channel.id if channel else None
-    value.permissions = discord.Permissions(manage_guild=admin, manage_roles=admin)
+    value.permissions = discord.Permissions(
+        manage_guild=admin, manage_roles=admin, view_channel=True, send_messages=True
+    )
     value.response = MagicMock()
     value.response.type = None
     value.response.is_done.return_value = False

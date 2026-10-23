@@ -182,7 +182,7 @@ class CharacterController:
             raise UserError(
                 "This private character menu belongs to another member or server. Open your own menu."
             )
-        require_bot_member(guild)
+        require_bot_member(guild, client=interaction.client)
         return guild
 
     async def execute(

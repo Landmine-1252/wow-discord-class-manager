@@ -95,7 +95,7 @@ class Controller:
             if action in {"setup", "sync", "status"}:
                 authorize(interaction, roles=action in {"setup", "sync"})
             if action not in {"status", "help"}:
-                require_bot_member(guild)
+                require_bot_member(guild, client=interaction.client)
             if action == "setup":
                 target = channel or interaction.channel
                 if (
@@ -105,12 +105,37 @@ class Controller:
                     raise UserError(
                         "Choose a text channel in this server for the panel."
                     )
-                if (
-                    not target.permissions_for(interaction.user).view_channel
-                    or not target.permissions_for(interaction.user).send_messages
-                ):
+                operation = "validate_invoker_channel_permissions"
+                if target.id == interaction.channel_id:
+                    # Discord resolves current-channel permissions in the
+                    # interaction. Partial/stale channel caches can disagree.
+                    permissions = interaction.permissions
+                else:
+                    operation = "fetch_target_channel"
+                    target = await guild.fetch_channel(target.id)
+                    if (
+                        not isinstance(target, discord.TextChannel)
+                        or target.guild.id != guild.id
+                    ):
+                        raise UserError(
+                            "Choose a text channel in this server for the panel."
+                        )
+                    permissions = target.permissions_for(interaction.user)
+                    operation = "validate_invoker_channel_permissions"
+                missing = [
+                    label
+                    for flag, label in (
+                        ("view_channel", "View Channel"),
+                        ("send_messages", "Send Messages"),
+                    )
+                    if not getattr(permissions, flag)
+                ]
+                if missing:
                     raise UserError(
-                        "You need View Channel and Send Messages in the selected channel."
+                        "Your account needs these permissions in the selected channel: "
+                        + ", ".join(missing)
+                        + ". Ask a server administrator to check your channel permissions, or choose a channel where you can post.",
+                        code="invoker_channel_permissions",
                     )
                 previous = await self.store.panel(guild.id)
                 if previous and previous.channel_id != target.id and channel is None:
@@ -207,11 +232,41 @@ class Controller:
         error = getattr(error, "original", error)
         if isinstance(error, (UserError, StorageError)):
             message = str(error)
+        elif isinstance(error, app_commands.TransformerError):
+            operation = (
+                "resolve_channel"
+                if error.type == discord.AppCommandOptionType.channel
+                else "resolve_option"
+            )
+            command = interaction.command
+            if isinstance(command, app_commands.Command):
+                action = command.qualified_name
+            try:
+                guild = require_guild(self.settings, interaction.guild)
+                require_bot_member(guild, client=interaction.client)
+            except UserError as context_error:
+                message = str(context_error)
+            else:
+                if error.type == discord.AppCommandOptionType.channel:
+                    message = (
+                        "The selected channel could not be resolved. Choose an existing server text channel the bot can view, "
+                        "or run setup directly in that channel without the channel option."
+                    )
+                else:
+                    message = "The selected command option could not be resolved. Reopen the command and select it again."
         elif isinstance(error, discord.HTTPException):
             message = api_problem(error)
         else:
             message = "The request could not be completed. Please try again; ask an officer to check the bot logs if it persists."
-        if not isinstance(error, UserError):
+        if isinstance(error, UserError):
+            log.info(
+                "interaction_rejected guild_id=%s action=%s operation=%s reason=%s",
+                interaction.guild_id,
+                action,
+                operation,
+                error.code,
+            )
+        else:
             log.error(
                 "interaction_failed guild_id=%s action=%s operation=%s error_type=%s http_status=%s discord_code=%s",
                 interaction.guild_id,
