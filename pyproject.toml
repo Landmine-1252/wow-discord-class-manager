@@ -1,0 +1,49 @@
+[build-system]
+requires = ["hatchling==1.27.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "wow-discord-class-manager"
+version = "1.1.0"
+description = "Self-hosted Discord character rosters and main-class colors for World of Warcraft guilds"
+readme = "README.md"
+requires-python = ">=3.13,<3.15"
+license = "MIT"
+authors = [{ name = "landmine-1252" }]
+dependencies = ["discord.py==2.7.1", "aiohttp>=3.12,<4"]
+
+[project.urls]
+Repository = "https://github.com/landmine-1252/wow-discord-class-manager"
+Issues = "https://github.com/landmine-1252/wow-discord-class-manager/issues"
+
+[project.scripts]
+wow-class-manager = "wow_class_manager.__main__:main"
+wow-class-health = "wow_class_manager.health:main"
+
+[dependency-groups]
+dev = ["black>=25.1", "ruff>=0.11", "pytest>=8.3", "pytest-asyncio>=1.0", "pytest-cov>=6", "pyyaml>=6"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/wow_class_manager"]
+
+[tool.black]
+target-version = ["py313"]
+line-length = 88
+
+[tool.ruff]
+target-version = "py313"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+addopts = "--strict-markers"
+
+[tool.coverage.run]
+source = ["wow_class_manager"]
+branch = true

@@ -1,0 +1,17 @@
+**
+!pyproject.toml
+!uv.lock
+!src/
+!src/**
+!LICENSE
+!Dockerfile
+src/**/__pycache__/
+src/**/*.pyc
+**/.env
+**/.env.*
+**/secrets/
+**/*.db
+**/*.db-*
+**/*.sqlite*
+**/*.pem
+**/*.key

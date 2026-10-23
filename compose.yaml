@@ -1,0 +1,25 @@
+name: wow-class-manager
+services:
+  bot:
+    image: ${BOT_IMAGE:-ghcr.io/landmine-1252/wow-discord-class-manager:1.1.0}
+    env_file: .env
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 40s
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - bot-data:/data
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m,mode=1777
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  bot-data:

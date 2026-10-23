@@ -1,0 +1,8 @@
+# docker compose -f compose.yaml -f compose.build.yaml up -d --build
+services:
+  bot:
+    image: wow-discord-class-manager:local
+    pull_policy: build
+    build:
+      context: .
+      target: runtime

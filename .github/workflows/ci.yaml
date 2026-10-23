@@ -1,0 +1,47 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  checks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          version: "0.13.5"
+          enable-cache: true
+      - run: uv sync --locked --python 3.13
+      - name: Ruff lint and import ordering
+        run: uv run --no-sync ruff check .
+      - name: Black formatting
+        run: uv run --no-sync black --check .
+      - name: Unit and integration tests (mock Discord)
+        run: uv run --no-sync pytest --cov=wow_class_manager --cov-report=term-missing
+      - name: Validate Compose
+        run: |
+          cp .env.example .env
+          docker compose config --quiet
+          docker compose -f compose.yaml -f compose.build.yaml config --quiet
+          mkdir -p secrets
+          printf 'test-only' > secrets/discord_bot_token
+          docker compose -f compose.yaml -f compose.secrets.yaml config --quiet
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Build container smoke test
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          push: false
+          load: true
+          tags: wow-class-manager:ci
+      - name: Container imports and non-root SQLite write
+        run: |
+          docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges --tmpfs /tmp --entrypoint python wow-class-manager:ci -c 'import os, discord; from wow_class_manager.bot import ClassBot; assert os.getuid() == 10001; print(discord.__version__)'
+          docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges --tmpfs /tmp --mount type=volume,destination=/data --entrypoint python wow-class-manager:ci -c 'import asyncio; from pathlib import Path; from wow_class_manager.storage import Store; s = Store(Path("/data/smoke.sqlite3")); asyncio.run(s.open()); asyncio.run(s.close())'
