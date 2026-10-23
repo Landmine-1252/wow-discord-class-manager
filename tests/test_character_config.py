@@ -31,6 +31,18 @@ def test_character_feature_disabled_preserves_legacy_defaults(env):
     assert settings.panel_title == "Choose Your Class"
 
 
+@pytest.mark.parametrize("enabled", ["true", "false"])
+def test_explicit_description_survives_panel_mode_change(env, enabled):
+    env.update(
+        ENABLE_CHARACTER_MANAGEMENT=enabled,
+        PANEL_DESCRIPTION="Share your current plans with the guild.",
+    )
+    assert (
+        Settings.from_env(env).panel_description
+        == "Share your current plans with the guild."
+    )
+
+
 def test_character_customization(env):
     env.update(
         CHARACTER_COMMAND_ROOT="hero",

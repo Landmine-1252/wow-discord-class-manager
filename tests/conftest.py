@@ -182,19 +182,29 @@ def guild():
 
 def interaction(guild, member, channel=None, *, admin=False):
     value = MagicMock(spec=discord.Interaction)
+    value.type = discord.InteractionType.application_command
     value.guild, value.guild_id = guild, guild.id
     value.user = member
     value.channel = channel
     value.channel_id = channel.id if channel else None
     value.permissions = discord.Permissions(manage_guild=admin, manage_roles=admin)
     value.response = MagicMock()
+    value.response.type = None
     value.response.is_done.return_value = False
     value.response.send_message = AsyncMock()
 
     async def defer(**kwargs):
         value.response.is_done.return_value = True
+        value.response.type = (
+            discord.InteractionResponseType.deferred_message_update
+            if not kwargs.get("thinking", False)
+            and value.type
+            in (discord.InteractionType.component, discord.InteractionType.modal_submit)
+            else discord.InteractionResponseType.deferred_channel_message
+        )
 
     value.response.defer = AsyncMock(side_effect=defer)
     value.followup = SimpleNamespace(send=AsyncMock())
+    value.edit_original_response = AsyncMock()
     value.message = None
     return value

@@ -18,8 +18,9 @@ PANEL_DESCRIPTION = (
     "automatically use your class color. You can change your selection at any time."
 )
 CHARACTER_PANEL_DESCRIPTION = (
-    "Register your main character and alts, manage your characters, and change "
-    "mains whenever you want. Your main character determines your Discord class color."
+    "Share the characters you plan to play, choose your main, and get to know "
+    "the community. Your main sets your Discord class color. "
+    "You can change your plans anytime."
 )
 
 

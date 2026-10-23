@@ -1,29 +1,32 @@
 # WoW Discord Class Manager
 
-A small, self-hosted Discord bot for World of Warcraft: Forever guild characters. Members register a two-part character name and class, keep any number of alts, and choose one main. The bot creates safe class roles and keeps each member's Discord class color aligned with their main.
+A small, self-hosted Discord bot that helps a World of Warcraft: Forever community share the characters its members plan to play. Members register a two-part character name and class, keep any number of alts, and choose one main. Plans can change: the bot safely updates each member's Discord class role when they choose a different main.
 
 **Create a Discord application → Configure the token → Start the container → Invite the bot → Run `/class setup` → Done.** Inviting the bot before starting the container works too.
 
 ## What members see
 
-One public message titled **World of Warcraft Character Manager**, with **Manage Characters** and **My Characters** buttons. All registration, editing and selection happens privately; the public panel stays unchanged.
+One public message titled **World of Warcraft Character Manager**, with **Manage Characters**, **My Characters** and, when enabled, **Community Roster** buttons. Character management and roster browsing open private views; the public panel stays unchanged.
 
 1. Choose **Manage Characters → Add Character**, select Paladin, and enter **Primary Name: John** and **Secondary Name: Stormwind** in separate fields. **John Stormwind** automatically becomes your first main and receives the Paladin role.
 2. Add **Sam Ironforge** as Warrior. Sam becomes an alt, John remains main, and your role stays Paladin.
-3. Choose **Change Main → Sam Ironforge**. Sam becomes main, John automatically becomes an alt, Warrior replaces Paladin, and both character records remain. Switching back works the same way. Two characters of the same class can exchange main status without removing and reassigning that role.
+3. Select **Sam Ironforge** from the **Change Main** dropdown on your dashboard. Sam becomes main, John automatically becomes an alt, Warrior replaces Paladin, and both character records remain. Switching back works the same way. Two characters of the same class can exchange main status without removing and reassigning that role.
 4. Use **Edit Character** to change either name component or the class while preserving the record and main/alt status. Editing an alt's class does not assign an alt role; editing the main's class synchronizes the main role.
 5. **Remove Character** requires confirmation. Removing a main with alts first requires choosing a replacement; the old main is removed only after the replacement succeeds. Removing the only character requires `ALLOW_CLEAR_SELECTION=true`.
 
+Your private dashboard refreshes after changes. Paging, Back and Cancel controls keep navigation in the same private message instead of filling the channel or your private session with follow-up messages. You can enter names you plan to use and edit them later; both name fields are still required, and the bot never invents names or claims they are reserved in the game.
+
 WoW Forever uses two name components, with full-name uniqueness within a game region. The bot uses the complete name for local roster comparisons but cannot verify game ownership, availability or naming-policy approval. Its default 2–12 characters per component are configurable application limits. [Blizzard's naming overview](https://news.blizzard.com/en-us/article/24304161/create-a-name-of-your-own-in-wow-forever)
 
-`/character list` privately shows your main and alts. `/roster` shows the guild's registered characters with member, class and main/alt filters, subject to the operator's visibility setting. Long rosters use pages; the default character limit is unlimited. Different Discord users may self-report the same full name, while duplicates within one member's guild roster are rejected.
+`/character list` privately shows your main and alts. **Community Roster** or `/roster` lets you browse what other members plan to play using class, main/alt and member dropdown filters, with paging and Reset Filters. Access follows the operator's roster visibility setting. Long rosters use pages; the default character limit is unlimited. Different Discord users may self-report the same full name, while duplicates within one member's guild roster are rejected.
 
 Discord displays the color of a member's highest colored role. An officer role above a class role can override the visible class color.
 
 ## Features
 
 - The nine original Classic classes enabled by default; four modern classes available by configuration.
-- Two-part Unicode character names, one main per guild member, automatic main/alt switching and paginated rosters.
+- Two-part Unicode character names, one main per guild member, automatic main/alt switching and private dashboards.
+- A community roster with native filters and pagination to discover members' current character plans.
 - Automatic role discovery and creation on startup and server join, with safe, repeatable synchronization.
 - Persistent panels, character records and SQLite role associations that survive container restarts.
 - Configurable role names, colors, panel text, command names and guild allowlist.
@@ -65,7 +68,7 @@ You need a Discord account allowed to install apps in your server, a Discord app
 4. In the Developer Portal, open **Installation**, enable **Guild Install**, and select **Discord Provided Link**. Under Guild Install defaults choose scopes **bot** and **applications.commands**. Give the bot **Manage Roles**, **View Channels**, **Send Messages**, **Embed Links**, and **Read Message History**. Copy the installation link and invite it. Do not grant Administrator.
 5. In your server's role settings, put the bot's role above existing class roles. In a text channel, run **`/class setup`** as someone with **Manage Server and Manage Roles**. The bot creates or safely reuses the class roles and publishes one panel.
 
-Members use the two public buttons or `/character add`, `/character list`, `/character main`, `/character edit`, `/character remove` and `/character help`. Officers retain `/class setup`, `/class sync` and `/class status`. Run setup again to update the existing bot-owned panel; explicitly choose a different `channel` option to move it. An officer with Manage Server and Manage Roles can use `/character purge` to remove a member's stored roster after confirmation.
+Members use the public buttons or `/character add`, `/character list`, `/character main`, `/character edit`, `/character remove` and `/character help`. Officers retain `/class setup`, `/class sync` and `/class status`. Run setup again to update the existing bot-owned panel; explicitly choose a different `channel` option to move it. An officer with Manage Server and Manage Roles can use `/character purge` to remove a member's stored roster after confirmation.
 
 Existing class-only users keep their roles and can register at their convenience. No character names are invented during upgrade. Once a member has a registered roster, it controls their class: `/class set` and `/class clear` guide them to character management. Set `ENABLE_CHARACTER_MANAGEMENT=false` to restore the original class-selection panel and behavior while retaining stored characters for later use.
 

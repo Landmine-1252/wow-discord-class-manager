@@ -13,6 +13,7 @@ from wow_class_manager.character_commands import (
     build_roster_command,
 )
 from wow_class_manager.character_ui import (
+    COMMUNITY_ROSTER_ID,
     MANAGE_ID,
     MY_CHARACTERS_ID,
     PAGE_SIZE,
@@ -52,6 +53,7 @@ def character(
         class_id=class_id,
         is_main=main,
         needs_completion=incomplete,
+        updated_at="2026-10-23T00:00:00+00:00",
     )
 
 
@@ -103,8 +105,24 @@ async def test_public_character_view_is_persistent_and_neutral(character_control
     assert [(item.label, item.custom_id) for item in view.children] == [
         ("Manage Characters", MANAGE_ID),
         ("My Characters", MY_CHARACTERS_ID),
+        ("Community Roster", COMMUNITY_ROSTER_ID),
     ]
     assert not any(isinstance(item, discord.ui.Select) for item in view.children)
+
+
+@pytest.mark.parametrize("visibility,enabled", [("disabled", True), ("members", False)])
+async def test_roster_button_hidden_but_old_callback_can_still_be_registered(
+    character_controller, visibility, enabled
+):
+    root = character_controller.controller
+    root.settings = replace(
+        root.settings, roster_visibility=visibility, enable_guild_roster=enabled
+    )
+    published = CharacterView(root)
+    registered = CharacterView(root, register_all=True)
+    assert COMMUNITY_ROSTER_ID not in {item.custom_id for item in published.children}
+    assert COMMUNITY_ROSTER_ID in {item.custom_id for item in registered.children}
+    assert registered.is_persistent()
 
 
 async def test_registration_modal_has_separate_names_and_native_class_select(
@@ -172,7 +190,13 @@ async def test_edit_modal_preserves_id_and_both_independent_fields(
     call = interaction(guild, guild.member())
     await modal.on_submit(call)
     character_controller.manager.edit.assert_awaited_once_with(
-        guild, 456, existing.id, "John", "Ironforge", "paladin"
+        guild,
+        456,
+        existing.id,
+        "John",
+        "Ironforge",
+        "paladin",
+        expected_updated_at=existing.updated_at,
     )
     character_controller.manager.add.assert_not_called()
 
@@ -371,10 +395,8 @@ async def test_reconciliation_failure_does_not_hide_editing_or_main_switch(
     result = call.followup.send.call_args.kwargs
     assert "disabled" in result["embed"].description
     assert isinstance(result["view"], RosterView)
-    assert any(
-        item.label == "Change Main" and not item.disabled
-        for item in result["view"].children
-    )
+    assert isinstance(result["view"].main_select, discord.ui.Select)
+    assert not result["view"].main_select.disabled
 
 
 @pytest.mark.parametrize(

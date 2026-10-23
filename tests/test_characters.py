@@ -108,6 +108,78 @@ async def test_renaming_preserves_id_and_main(character_setup, guild):
     assert roster.alts[0].id == sam.id and roster.alts[0].primary_name == "Samuel"
 
 
+async def test_edit_accepts_current_version_and_preserves_newer_details_on_retry(
+    character_setup, guild
+):
+    manager, member, unrelated = character_setup
+    john, _ = await add_pair(manager, guild, member)
+    assert (
+        await manager.edit(
+            guild,
+            member.id,
+            john.id,
+            "Jonathan",
+            "Ironforge",
+            "mage",
+            expected_updated_at=john.updated_at,
+        )
+        == "Jonathan Ironforge has been updated."
+    )
+    fresh = await manager.records.character(guild.id, member.id, john.id)
+    assert fresh.updated_at != john.updated_at
+    member.add_roles.reset_mock()
+    member.remove_roles.reset_mock()
+    with pytest.raises(UserError, match="changed while the edit form was open"):
+        await manager.edit(
+            guild,
+            member.id,
+            john.id,
+            "John",
+            "Stormwind",
+            "paladin",
+            expected_updated_at=john.updated_at,
+        )
+    assert await manager.records.character(guild.id, member.id, john.id) == fresh
+    assert fresh.full_name == "Jonathan Ironforge" and fresh.class_id == "mage"
+    assert await assigned(manager, guild, member) == {"mage"}
+    assert unrelated in member.roles
+    assert await manager.records.pending(guild.id, member.id) is None
+    member.add_roles.assert_not_called()
+    member.remove_roles.assert_not_called()
+
+
+async def test_concurrent_edits_with_same_version_only_commit_once(
+    character_setup, guild
+):
+    manager, member, _ = character_setup
+    john, _ = await add_pair(manager, guild, member)
+    results = await asyncio.gather(
+        manager.edit(
+            guild,
+            member.id,
+            john.id,
+            "Jonathan",
+            "Ironforge",
+            "mage",
+            expected_updated_at=john.updated_at,
+        ),
+        manager.edit(
+            guild,
+            member.id,
+            john.id,
+            "Johnny",
+            "Stormwind",
+            "warrior",
+            expected_updated_at=john.updated_at,
+        ),
+        return_exceptions=True,
+    )
+    assert sum(isinstance(result, UserError) for result in results) == 1
+    current = await manager.records.character(guild.id, member.id, john.id)
+    assert current.full_name == "Jonathan Ironforge" and current.class_id == "mage"
+    assert await assigned(manager, guild, member) == {"mage"}
+
+
 async def test_multiple_alts_unlimited_and_case_insensitive_duplicate(
     character_setup, guild
 ):

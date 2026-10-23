@@ -293,9 +293,9 @@ class CharacterManager:
                 guild, user_id, {"kind": "promote", "character_id": character_id}, plan
             )
             demotion = (
-                f" {character_label(before.main)} is now an alt," if before.main else ""
+                f" {character_label(before.main)} is now an alt." if before.main else ""
             )
-            return f"Your main is now {character_label(selected)} ({REGISTRY[selected.class_id].name}).{demotion} Your Discord class role is synchronized. Higher colored roles can override its visible color."
+            return f"Your main is now {character_label(selected)} ({REGISTRY[selected.class_id].name}).{demotion} Your Discord class role is synchronized."
 
     async def edit(
         self,
@@ -305,6 +305,8 @@ class CharacterManager:
         primary_name: str,
         secondary_name: str,
         class_id: str,
+        *,
+        expected_updated_at: str | None = None,
     ) -> str:
         self._require(guild)
         primary, secondary, key = validate_names(
@@ -313,6 +315,13 @@ class CharacterManager:
         async with self.locks.member(guild.id, user_id):
             await self._recover_locked(guild, user_id)
             selected = await self.records.character(guild.id, user_id, character_id)
+            if (
+                expected_updated_at is not None
+                and selected.updated_at != expected_updated_at
+            ):
+                raise UserError(
+                    "This character changed while the edit form was open. Reopen Edit Character to use the latest details; your newer changes were kept."
+                )
             if class_id != selected.class_id:
                 if not self.settings.allow_character_class_edit:
                     raise UserError(
@@ -344,7 +353,7 @@ class CharacterManager:
                 plan,
             )
             note = " Choose your main with Change Main." if before.main is None else ""
-            return f"{primary} {secondary} has been updated. Its character ID and main/alt designation were preserved.{note}"
+            return f"{primary} {secondary} has been updated.{note}"
 
     async def remove(
         self,

@@ -33,7 +33,13 @@ Discord uses the member's highest colored role. Inspect all the member's roles a
 
 ## Character-management panel stops working after restart
 
-Check that the **same Discord application**, SQLite volume and component version are in use. Verify the bot is online/healthy, the guild is allowed, and Interactions Endpoint URL remains empty. “This panel is no longer active” means the database points to another message or its state was lost; use the current panel, or restore the correct backup. Run setup to publish/recover a panel when necessary and manually remove orphan bot panels. Persistent public buttons survive restarts; an already-open ephemeral editing session can expire, so reopen Manage Characters. If you still see the old class dropdown, check `ENABLE_CHARACTER_MANAGEMENT`, recreate the container after environment changes, and allow startup to refresh the saved panel.
+Check that the **same Discord application**, SQLite volume and component version are in use. Verify the bot is online/healthy, the guild is allowed, and Interactions Endpoint URL remains empty. “This panel is no longer active” means the database points to another message or its state was lost; use the current panel, or restore the correct backup. Run setup to publish/recover a panel when necessary and manually remove orphan bot panels. Persistent public buttons survive restarts; an already-open ephemeral editing session can expire, so reopen Manage Characters. Back, paging and successful changes normally update the current private dashboard; they do not update the public panel. If you still see the old class dropdown, check `ENABLE_CHARACTER_MANAGEMENT`, recreate the container after environment changes, and allow startup to refresh the saved panel.
+
+## Community Roster is missing, restricted or empty
+
+The public Community Roster button and `/roster` require `ENABLE_CHARACTER_MANAGEMENT=true`, `ENABLE_GUILD_ROSTER=true` and `ROSTER_VISIBILITY` other than `disabled`. Recreate the container and let the existing panel refresh after changing settings. With `ROSTER_VISIBILITY=admins`, the button remains visible but only members with Manage Server can open it; everyone can still view their own characters privately.
+
+Use Reset Filters to clear the class, main/alt and member selections. Results contain only characters registered in this server, including members' self-reported plans; the bot cannot discover characters from the game or another Discord server. A member with only a legacy class role has no character record until they provide both name parts.
 
 ## My character's Discord color is incorrect
 

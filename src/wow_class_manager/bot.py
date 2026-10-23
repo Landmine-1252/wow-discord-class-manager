@@ -75,7 +75,7 @@ class ClassBot(discord.Client):
     async def setup_hook(self) -> None:
         # Registered before the first READY, independent of cached messages.
         self.add_view(ClassView(self.controller, register_all=True))
-        self.add_view(CharacterView(self.controller))
+        self.add_view(CharacterView(self.controller, register_all=True))
         self.notifier.start()
         self._spawn(self._heartbeat(), "health-heartbeat")
         self._spawn(self._register_until_success(), "command-registration")
