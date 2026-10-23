@@ -1,3 +1,5 @@
+![Class Manager Bot banner with colorful Classic class symbols](docs/assets/branding/cmb-banner.png)
+
 # WoW Discord Class Manager
 
 A small, self-hosted Discord bot that helps a World of Warcraft: Forever community share the characters its members plan to play. Members register a two-part character name and class, keep any number of alts, and choose one main. Plans can change: the bot safely updates each member's Discord class role when they choose a different main.
@@ -96,6 +98,10 @@ Before upgrading from the class-only release, stop the bot and back up its `/dat
 Race and faction metadata are not collected in this version. Names never imply race or faction; the model can add optional metadata in a later additive migration.
 
 Automated tests use simulated Discord APIs. Before a public release, perform the [live acceptance checklist](docs/releasing.md#live-discord-acceptance-test) with your own application and a test server. Publishing workflows are provided; image availability depends on the repository owner running them and making the GHCR package Public.
+
+## Project artwork
+
+Use the [square icon](docs/assets/branding/cmb-icon.png) and [wide banner](docs/assets/branding/cmb-banner.png) for your installation or community documentation. Both are included as original PNGs. The [Discord setup guide](docs/discord-setup.md#optional-project-artwork) includes an icon preview and application branding instructions.
 
 ## Contributing and license
 

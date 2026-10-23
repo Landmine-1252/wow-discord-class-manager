@@ -14,6 +14,14 @@ The **Application ID** is a public identifier, not a token. This bot normally di
 
 Leave **Interactions Endpoint URL unset**. This application receives interactions over its outbound Gateway connection. Do not copy the public-HTTP-endpoint steps from tutorials for webhook-based apps. Discord documents both delivery methods in [Receiving and Responding to Interactions](https://docs.discord.com/developers/interactions/receiving-and-responding).
 
+### Optional: project artwork
+
+<img src="assets/branding/cmb-icon.png" alt="Class Manager Bot icon: a cyan star inside a multicolored ring" width="128" height="128">
+
+Download the [square icon PNG](assets/branding/cmb-icon.png) for your application and the [wide banner PNG](assets/branding/cmb-banner.png) for community documentation. On GitHub, open either file and use **Download raw file** to save the original image.
+
+To set the application icon, open your application in the Developer Portal, choose **General Information**, upload the icon and save your changes. This is the application metadata page described in [Discord's setup guide](https://docs.discord.com/developers/quick-start/getting-started#step-1-creating-an-app). Preview the result in Discord after saving. Each operator can choose their own artwork.
+
 ## 2. Configure installation
 
 Open **Installation** in the sidebar:
