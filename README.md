@@ -1,0 +1,1 @@
+# wow-discord-class-manager
