@@ -43,7 +43,7 @@ def validate_names(
     result: list[str] = []
     for label, value, minimum, maximum in (
         (
-            "Primary Name",
+            "First Name",
             primary_name,
             settings.character_primary_name_min_length,
             settings.character_primary_name_max_length,

@@ -164,7 +164,7 @@ async def test_registration_modal_has_separate_names_and_native_class_select(
 ):
     modal = CharacterModal(character_controller, 123, 456)
     assert [item.text for item in modal.children] == [
-        "Primary Name",
+        "First Name",
         "Secondary Name",
         "Class",
     ]
@@ -175,6 +175,9 @@ async def test_registration_modal_has_separate_names_and_native_class_select(
     assert len(modal.class_select.options) == 9
     data = modal.to_dict()
     assert [item["type"] for item in data["components"]] == [18, 18, 18]
+    inputs = [item["component"] for item in data["components"][:2]]
+    assert [item["custom_id"] for item in inputs] == ["primary_name", "secondary_name"]
+    assert all(item["type"] == 4 and item["style"] == 1 for item in inputs)
     assert data["components"][2]["component"]["type"] == 3
 
 
@@ -276,18 +279,30 @@ async def test_legacy_names_are_not_truncated_or_invented_in_modal(
     assert all(len(option.value) <= 100 for option in modal.class_select.options)
 
 
-async def test_disabled_class_stays_available_only_for_existing_character_rename(
+async def test_disabled_class_can_be_kept_for_rename_without_being_a_choice(
     character_controller,
+    guild,
 ):
     old = character(class_id="evoker")
     modal = CharacterModal(character_controller, 123, 456, old)
-    disabled = next(
-        option for option in modal.class_select.options if option.value == "evoker"
+    assert "evoker" not in {entry.value for entry in modal.class_select.options}
+    assert not modal.class_select.required
+    assert modal.class_select.min_values == 0
+    modal.primary._value, modal.secondary._value = "John", "Ironforge"
+    modal.class_select._values = []
+    await modal.on_submit(interaction(guild, guild.member()))
+    character_controller.manager.edit.assert_awaited_once_with(
+        guild,
+        456,
+        old.id,
+        "John",
+        "Ironforge",
+        "evoker",
+        expected_updated_at=old.updated_at,
     )
-    assert disabled.default
-    assert "disabled" in disabled.label
     new_modal = CharacterModal(character_controller, 123, 456)
     assert "evoker" not in {entry.value for entry in new_modal.class_select.options}
+    assert new_modal.class_select.required and new_modal.class_select.min_values == 1
 
 
 async def test_roster_and_picker_paginate_more_than_25_characters(

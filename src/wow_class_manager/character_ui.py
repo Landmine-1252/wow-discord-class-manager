@@ -553,7 +553,7 @@ class CharacterController:
             root = self.settings.character_command_root
             await self.send(
                 interaction,
-                content=f"Use `/{root} add` or Manage Characters to enter a Primary Name, Secondary Name, and class. Your first character becomes main; later characters become alts.\n`/{root} main` switches mains in one step and automatically makes the previous main an alt. Only your main sets your Discord class role.\n`/{root} list`, `/{root} edit` and `/{root} remove` show, change or remove your registered characters. Removal always asks for confirmation.\nNames and ownership are self-reported; registration does not verify game availability or ownership.",
+                content=f"Use `/{root} add` or Manage Characters to enter a First Name, Secondary Name, and class. Your first character becomes main; later characters become alts.\n`/{root} main` switches mains in one step and automatically makes the previous main an alt. Only your main sets your Discord class role.\n`/{root} list`, `/{root} edit` and `/{root} remove` show, change or remove your registered characters. Removal always asks for confirmation.\nNames and ownership are self-reported; registration does not verify game availability or ownership.",
                 view=BackView(self, guild.id, interaction.user.id),
             )
 
@@ -845,10 +845,10 @@ class CharacterModal(discord.ui.Modal):
         )
         self.add_item(
             discord.ui.Label(
-                text="Primary Name",
+                text="First Name",
                 component=self.primary,
                 description=(
-                    "Original legacy data is preserved. Enter the primary part here."
+                    "Original legacy data is preserved. Enter the first name here."
                     if character and character.needs_completion
                     else None
                 ),
@@ -857,6 +857,9 @@ class CharacterModal(discord.ui.Modal):
         self.add_item(discord.ui.Label(text="Secondary Name", component=self.secondary))
         self.class_select: discord.ui.Select | None = None
         if character is None or settings.allow_character_class_edit:
+            keep_saved_class = character is not None and character.class_id not in {
+                entry.id for entry in settings.classes
+            }
             options = [
                 discord.SelectOption(
                     label=entry.definition.name,
@@ -865,28 +868,29 @@ class CharacterModal(discord.ui.Modal):
                 )
                 for entry in settings.display_classes
             ]
-            if (
-                character
-                and character.class_id in REGISTRY
-                and character.class_id not in {entry.id for entry in settings.classes}
-            ):
-                options.append(
-                    discord.SelectOption(
-                        label=class_name(character.class_id) + " (disabled)",
-                        value=character.class_id,
-                        default=True,
-                    )
-                )
-            options.sort(key=lambda option: option.label.casefold())
             self.class_select = discord.ui.Select(
                 custom_id="class_id",
-                placeholder="Choose the character's class",
+                placeholder=(
+                    "Keep saved class or choose an enabled class"
+                    if keep_saved_class
+                    else "Choose the character's class"
+                ),
                 options=options,
-                min_values=1,
+                min_values=0 if keep_saved_class else 1,
                 max_values=1,
-                required=True,
+                required=not keep_saved_class,
             )
-            self.add_item(discord.ui.Label(text="Class", component=self.class_select))
+            self.add_item(
+                discord.ui.Label(
+                    text="Class",
+                    component=self.class_select,
+                    description=(
+                        "Leave blank to keep this character's saved class."
+                        if keep_saved_class
+                        else None
+                    ),
+                )
+            )
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         primary, secondary = self.primary.value, self.secondary.value
@@ -896,7 +900,8 @@ class CharacterModal(discord.ui.Modal):
             if len(values) == 1
             else (
                 self.character.class_id
-                if self.character and self.class_select is None
+                if self.character
+                and (self.class_select is None or not self.class_select.required)
                 else ""
             )
         )

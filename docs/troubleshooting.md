@@ -98,13 +98,17 @@ During a Discord outage, the prior valid main remains committed. A journal detec
 
 ## A two-part name is rejected
 
-Use the separate Primary Name and Secondary Name fields. Both are required for new characters. Check the configured minimum/maximum for each part (default 2–12, application policy). Unicode letters and attached accent marks are accepted; spaces, leading/trailing whitespace, digits, punctuation, invisible formatting/control characters and Discord markup are rejected. Capitalization is preserved after safe Unicode normalization.
+Use the separate First Name and Secondary Name fields. Both are required for new characters. Check the configured minimum/maximum for each part (default 2–12, application policy). Unicode letters and attached accent marks are accepted; spaces, leading/trailing whitespace, digits, punctuation, invisible formatting/control characters and Discord markup are rejected. Capitalization is preserved after safe Unicode normalization.
 
 Duplicate comparison uses the full normalized name, case-insensitively, within your guild roster. John Stormwind and John Ironforge are different; John Stormwind and john stormwind are duplicates. Other Discord users may register the same full name. Passing bot validation does not prove the name is available, accepted or owned in the game.
 
+## Tab selects the current name instead of moving to the next field
+
+The bot sends First Name, Secondary Name and Class in that order. Discord controls keyboard focus in native modals; its supported [Text Input API](https://docs.discord.com/developers/components/reference#text-input) provides no Tab-key or focus controls. Use the pointer/touchscreen to select the next field if your client behaves this way. The bot cannot reliably override that behavior, and the field-label update does not claim to fix Discord's keyboard navigation.
+
 ## A character was renamed
 
-Use Edit Character to change Primary Name and/or Secondary Name. The same internal character ID remains, preserving main/alt status and class. Future lists use the updated full name; an old private reply is a historical snapshot. Do not remove and re-register the character just to rename it. Changing an alt's class leaves the main role unchanged; changing the main's class synchronizes that role when class editing is enabled.
+Use Edit Character to change First Name and/or Secondary Name. The same internal character ID remains, preserving main/alt status and class. Future lists use the updated full name; an old private reply is a historical snapshot. Do not remove and re-register the character just to rename it. Changing an alt's class leaves the main role unchanged; changing the main's class synchronizes that role when class editing is enabled.
 
 ## A previously registered character is missing after migration
 

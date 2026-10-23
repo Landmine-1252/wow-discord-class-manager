@@ -7,10 +7,12 @@ import discord
 import pytest
 from conftest import interaction
 
+from wow_class_manager.character_commands import build_roster_command
 from wow_class_manager.character_ui import PAGE_SIZE
-from wow_class_manager.classes import REGISTRY
 from wow_class_manager.commands import Controller
+from wow_class_manager.config import Settings
 from wow_class_manager.logging_setup import Redactor
+from wow_class_manager.roles import UserError
 from wow_class_manager.roster_ui import GuildRosterBrowser, show_guild_roster
 
 
@@ -61,25 +63,22 @@ def button(browser, label):
     )
 
 
-async def test_browser_native_filters_include_disabled_classes_and_selected_defaults(
+async def test_browser_native_filters_only_include_enabled_classes_and_selected_defaults(
     browser_controller,
 ):
-    browser = view(browser_controller, class_id="evoker", kind="alts", user_id=789)
+    browser = view(browser_controller, class_id="paladin", kind="alts", user_id=789)
     assert {option.value for option in browser.class_filter.options} == {
         "all",
-        *REGISTRY,
+        *(entry.id for entry in browser_controller.settings.classes),
+    }
+    assert len(browser.class_filter.options) == 10
+    assert "monk" not in {option.value for option in browser.class_filter.options}
+    assert "death_knight" not in {
+        option.value for option in browser.class_filter.options
     }
     assert (
         next(option for option in browser.class_filter.options if option.default).value
-        == "evoker"
-    )
-    assert (
-        "Disabled"
-        in next(
-            option
-            for option in browser.class_filter.options
-            if option.value == "evoker"
-        ).description
+        == "paladin"
     )
     assert (
         next(option for option in browser.kind_filter.options if option.default).value
@@ -126,8 +125,8 @@ async def test_pagination_reads_only_registered_data_and_displays_filtered_total
     [
         (
             "change_class",
-            ["evoker"],
-            {"user_id": 789, "class_id": "evoker", "kind": "alts"},
+            ["mage"],
+            {"user_id": 789, "class_id": "mage", "kind": "alts"},
         ),
         ("change_class", ["all"], {"user_id": 789, "class_id": None, "kind": "alts"}),
         (
@@ -368,3 +367,109 @@ async def test_long_names_and_escaped_owner_names_fit_without_hiding_rows(
     assert "@everyone" not in sent["embed"].description
     assert "\\*\\*name" in sent["embed"].description
     guild.fetch_member.assert_not_called()
+
+
+async def test_roster_slash_choices_exclude_disabled_classes(browser_controller):
+    command = build_roster_command(browser_controller)
+    parameter = next(item for item in command.parameters if item.name == "wow_class")
+    assert [choice.value for choice in parameter.choices] == [
+        entry.id for entry in browser_controller.settings.display_classes
+    ]
+    assert len(parameter.choices) == 9
+    assert "monk" not in {choice.value for choice in parameter.choices}
+    assert "death_knight" not in {choice.value for choice in parameter.choices}
+
+
+async def test_enabled_modern_classes_appear_in_alphabetical_filters(
+    browser_controller, env
+):
+    browser_controller.settings = Settings.from_env(
+        {**env, "ENABLED_CLASSES": "monk,warrior,death_knight"}
+    )
+    browser = view(browser_controller, class_id="monk")
+    assert [option.label for option in browser.class_filter.options] == [
+        "All classes",
+        "Death Knight",
+        "Monk",
+        "Warrior",
+    ]
+    command = build_roster_command(browser_controller)
+    parameter = next(item for item in command.parameters if item.name == "wow_class")
+    assert [choice.name for choice in parameter.choices] == [
+        "Death Knight",
+        "Monk",
+        "Warrior",
+    ]
+
+
+@pytest.mark.parametrize("class_id", ["monk", "death_knight"])
+async def test_disabled_filter_from_stale_command_or_menu_does_not_read_storage(
+    browser_controller, guild, class_id
+):
+    call = interaction(guild, guild.member())
+    await browser_controller.guild_roster(call, class_id=class_id)
+    assert (
+        "Choose an enabled class or All classes"
+        in call.followup.send.call_args.kwargs["content"]
+    )
+    browser_controller.manager.guild_roster.assert_not_awaited()
+
+    call = interaction(guild, guild.member())
+    call.data = {"values": [class_id]}
+    await view(browser_controller).change_class(call)
+    assert (
+        "Choose an enabled class or All classes"
+        in call.followup.send.call_args.kwargs["content"]
+    )
+    browser_controller.manager.guild_roster.assert_not_awaited()
+
+
+async def test_old_selected_class_can_be_reset_after_it_is_disabled(
+    browser_controller, guild
+):
+    browser = view(browser_controller, class_id="warrior")
+    browser_controller.settings = replace(
+        browser_controller.settings,
+        classes=tuple(
+            entry
+            for entry in browser_controller.settings.classes
+            if entry.id != "warrior"
+        ),
+    )
+    call = interaction(guild, guild.member())
+    await browser.next(call)
+    browser_controller.manager.guild_roster.assert_not_awaited()
+    assert "All classes" in call.followup.send.call_args.kwargs["content"]
+    await browser.reset(call)
+    browser_controller.manager.guild_roster.assert_awaited_once_with(
+        guild, call.user, user_id=None, class_id=None, kind="all"
+    )
+    updated = browser_controller.send.call_args.kwargs["view"]
+    assert "warrior" not in {option.value for option in updated.class_filter.options}
+    assert updated.class_id is None
+
+
+async def test_disabled_class_cannot_be_rendered_as_missing_dropdown_default(
+    browser_controller,
+):
+    with pytest.raises(UserError, match="enabled class or All classes"):
+        view(browser_controller, class_id="monk")
+
+
+async def test_all_classes_keeps_saved_disabled_characters_visible(
+    browser_controller, guild
+):
+    saved = [character(1, main=True), character(2)]
+    saved[0].class_id = "monk"
+    saved[1].class_id = "death_knight"
+    browser_controller.manager.guild_roster.return_value = saved
+    call = interaction(guild, guild.member())
+    await browser_controller.guild_roster(call)
+    sent = browser_controller.send.call_args.kwargs
+    assert "Monk | Main" in sent["embed"].description
+    assert "Death Knight | Alt" in sent["embed"].description
+    assert [entry.class_id for entry in saved] == ["monk", "death_knight"]
+    assert "monk" not in {option.value for option in sent["view"].class_filter.options}
+    browser_controller.manager.guild_roster.assert_awaited_once_with(
+        guild, call.user, user_id=None, class_id=None, kind="all"
+    )

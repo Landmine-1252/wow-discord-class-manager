@@ -1,6 +1,8 @@
+from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
+from conftest import interaction
 
 from wow_class_manager.bot import ClassBot
 from wow_class_manager.character_commands import build_roster_command
@@ -68,7 +70,7 @@ async def test_legacy_dropdown_and_slash_choices_use_same_alphabetical_order(
     assert [choice.name for choice in command.parameters[0].choices] == CLASSIC_NAMES
 
 
-async def test_character_modal_orders_classes_and_preserves_selected_disabled_class(
+async def test_character_modal_only_offers_enabled_classes_when_editing_legacy_class(
     controller,
 ):
     ui = controller.characters_ui
@@ -82,19 +84,18 @@ async def test_character_modal_orders_classes_and_preserves_selected_disabled_cl
         needs_completion=False,
     )
     edit = CharacterModal(ui, 123, 456, character=saved)
-    assert [option.label for option in edit.class_select.options] == [
-        "Death Knight (disabled)",
-        *CLASSIC_NAMES,
-    ]
-    assert [option.value for option in edit.class_select.options if option.default] == [
-        "death_knight"
-    ]
+    assert [option.label for option in edit.class_select.options] == CLASSIC_NAMES
+    assert not any(option.default for option in edit.class_select.options)
+    assert not edit.class_select.required
+    assert edit.class_select.min_values == 0
 
 
-async def test_guild_roster_dropdown_and_command_alphabetize_all_classes(controller):
+async def test_guild_roster_dropdown_and_command_alphabetize_enabled_classes(
+    controller,
+):
     ui = controller.characters_ui
     browser = GuildRosterBrowser(ui, 123, 456)
-    expected = [entry.name for entry in ALPHABETICAL_CLASSES]
+    expected = CLASSIC_NAMES
     assert [option.label for option in browser.class_filter.options] == [
         "All classes",
         *expected,
@@ -102,3 +103,43 @@ async def test_guild_roster_dropdown_and_command_alphabetize_all_classes(control
     command = build_roster_command(ui)
     parameter = next(item for item in command.parameters if item.name == "wow_class")
     assert [choice.name for choice in parameter.choices] == expected
+
+
+@pytest.mark.parametrize("selection", [None, "mage"])
+async def test_edit_disabled_main_preserves_record_and_only_changes_class_if_selected(
+    settings, store, guild, selection
+):
+    original = ClassBot(settings, store, Redactor())
+    await original.roles.reconcile(guild)
+    member = guild.member()
+    await original.characters.add(guild, member.id, "John", "Stormwind", "paladin")
+    saved = (await original.characters.records.roster(guild.id, member.id)).main
+    restricted = replace(
+        settings,
+        classes=tuple(entry for entry in settings.classes if entry.id != "paladin"),
+    )
+    current = ClassBot(restricted, store, Redactor())
+    try:
+        member.add_roles.reset_mock()
+        member.remove_roles.reset_mock()
+        modal = CharacterModal(
+            current.controller.characters_ui, guild.id, member.id, saved
+        )
+        assert "paladin" not in {option.value for option in modal.class_select.options}
+        modal.primary._value, modal.secondary._value = "John", "Ironforge"
+        modal.class_select._values = [selection] if selection else []
+        call = interaction(guild, member)
+        await modal.on_submit(call)
+        result = await current.characters.records.roster(guild.id, member.id)
+        assert result.main.id == saved.id
+        assert result.main.full_name == "John Ironforge"
+        assert result.main.class_id == (selection or "paladin")
+        mapping = await store.roles(guild.id)
+        assert {role.id for role in member.roles} == {mapping[selection or "paladin"]}
+        assert "has been updated" in call.followup.send.call_args.kwargs["content"]
+        if selection is None:
+            member.add_roles.assert_not_awaited()
+            member.remove_roles.assert_not_awaited()
+    finally:
+        await current.close()
+        await original.close()

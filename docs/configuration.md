@@ -28,13 +28,15 @@ Disabling a class by itself does not mutate member roles. When a member explicit
 
 ## Characters and guild roster
 
+All class dropdowns and slash-command class choices show only `ENABLED_CLASSES`, alphabetically. Stored characters from disabled classes remain visible in personal rosters and the guild roster's **All classes** view. When editing one, leave the optional Class field empty to preserve its saved class while renaming it, or select an enabled class explicitly.
+
 | Variable | Purpose | Default | Required? | Example / notes |
 | --- | --- | --- | --- | --- |
 | `ENABLE_CHARACTER_MANAGEMENT` | Enable main/alt workflows and character panel | `true` | No | `false` restores legacy class-only behavior while retaining character records. Re-enabling restores main-authoritative role reconciliation. |
 | `CHARACTER_COMMAND_ROOT` | Character slash-command group | `character` | No | `hero`; 1–32 lowercase ASCII letters, digits, `_` or `-`. Must differ from the active class group and active `roster` command. |
 | `MAX_CHARACTERS_PER_USER` | Per-user, per-guild character cap | `0` (unlimited) | No | `100`; nonnegative integer up to 2147483647. Lowering a limit never deletes records; it blocks further additions until below the limit. Lists are paginated independently of this setting. |
-| `CHARACTER_PRIMARY_NAME_MIN_LENGTH` | Minimum primary-name length | `2` | No | `1`; 1–50, no greater than its maximum. |
-| `CHARACTER_PRIMARY_NAME_MAX_LENGTH` | Maximum primary-name length | `12` | No | `20`; 1–50, no smaller than its minimum. |
+| `CHARACTER_PRIMARY_NAME_MIN_LENGTH` | Minimum first-name length | `2` | No | `1`; 1–50, no greater than its maximum. |
+| `CHARACTER_PRIMARY_NAME_MAX_LENGTH` | Maximum first-name length | `12` | No | `20`; 1–50, no smaller than its minimum. |
 | `CHARACTER_SECONDARY_NAME_MIN_LENGTH` | Minimum secondary-name length | `2` | No | `2`; 1–50, no greater than its maximum. |
 | `CHARACTER_SECONDARY_NAME_MAX_LENGTH` | Maximum secondary-name length | `12` | No | `20`; 1–50, no smaller than its minimum. |
 | `ENABLE_GUILD_ROSTER` | Enable Community Roster and guild-wide `/roster` | `true` | No | `false` hides the public roster button and command; private personal rosters remain available. |
@@ -50,11 +52,13 @@ With a registered roster and character management enabled, `/class set` and `/cl
 
 ### Two-part name policy
 
-Enter **Primary Name** and **Secondary Name** in separate required fields. `John Stormwind`, `John Ironforge` and `Sam Ironforge` can coexist in one roster. `John Stormwind` and `john stormwind` cannot. Display capitalization is preserved; Unicode NFC normalization makes equivalent composed/accented forms compare reliably, and the database key additionally uses Unicode casefolding. Legitimate Unicode letters and attached combining marks are accepted. Spaces inside a component, surrounding whitespace, punctuation, digits, invisible/control characters, malformed Unicode and Discord mention/formatting syntax are rejected rather than silently rewritten.
+The visible **First Name** field retains the internal `primary_name` identifier and the existing `CHARACTER_PRIMARY_NAME_MIN_LENGTH` / `CHARACTER_PRIMARY_NAME_MAX_LENGTH` settings. No configuration rename or database migration is needed.
+
+Enter **First Name** and **Secondary Name** in separate required fields. `John Stormwind`, `John Ironforge` and `Sam Ironforge` can coexist in one roster. `John Stormwind` and `john stormwind` cannot. Display capitalization is preserved; Unicode NFC normalization makes equivalent composed/accented forms compare reliably, and the database key additionally uses Unicode casefolding. Legitimate Unicode letters and attached combining marks are accepted. Spaces inside a component, surrounding whitespace, punctuation, digits, invisible/control characters, malformed Unicode and Discord mention/formatting syntax are rejected rather than silently rewritten.
 
 The configured lengths apply after normalization and are **application defaults**, not confirmed separate Blizzard name-length limits. Blizzard describes two-part names whose complete combination is unique within a region; this bot only checks duplicates within the same Discord member's guild roster. Other members can register the same full name because ownership is self-reported. It does not contact Blizzard to validate availability, ownership, naming-policy approval, reserved words or restricted spelling patterns. [Official naming overview](https://news.blizzard.com/en-us/article/24304161/create-a-name-of-your-own-in-wow-forever)
 
-Changing name limits does not rewrite or delete existing characters. Supported imported single-name records retain the original string and are marked for completion; use Edit Character to supply the real primary and secondary parts. The original legacy name remains preserved. Race and faction are not inferred or required in this release.
+Changing name limits does not rewrite or delete existing characters. Supported imported single-name records retain the original string and are marked for completion; use Edit Character to supply the real first and secondary parts. The original legacy name remains preserved. Race and faction are not inferred or required in this release.
 
 ## Panel and behavior
 

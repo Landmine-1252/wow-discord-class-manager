@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING
 import discord
 
 from .character_ui import OwnedView, class_name, page_slice, safe_text
-from .classes import ALPHABETICAL_CLASSES, REGISTRY
 from .roles import UserError
 
 if TYPE_CHECKING:
@@ -52,6 +51,18 @@ def count_label(count: int, singular: str) -> str:
     return f"{count} {singular}{'' if count == 1 else 's'}"
 
 
+def require_enabled_filter(
+    controller: CharacterController, class_id: str | None
+) -> None:
+    if class_id is not None and class_id not in {
+        entry.id for entry in controller.settings.classes
+    }:
+        raise UserError(
+            "Choose an enabled class or All classes from the roster filters. "
+            "Saved characters from disabled classes remain visible under All classes."
+        )
+
+
 async def show_guild_roster(
     controller: CharacterController,
     interaction: discord.Interaction,
@@ -63,8 +74,7 @@ async def show_guild_roster(
 ) -> None:
     """Render inside the controller's deferred, tracked interaction execution."""
     guild = require_roster_access(controller, interaction)
-    if class_id is not None and class_id not in REGISTRY:
-        raise UserError("Choose a known class from the roster filters.")
+    require_enabled_filter(controller, class_id)
     if kind not in KINDS:
         raise UserError("Choose all characters, mains or alts.")
     if user_id is not None and (
@@ -138,13 +148,13 @@ class GuildRosterBrowser(OwnedView):
         pages: int = 1,
     ):
         super().__init__(controller, guild_id, owner_id)
+        require_enabled_filter(controller, class_id)
         self.user_id, self.class_id, self.kind, self.page = (
             user_id,
             class_id,
             kind,
             page,
         )
-        enabled = {entry.id for entry in controller.settings.classes}
         self.class_filter = discord.ui.Select(
             placeholder="Filter by class",
             min_values=1,
@@ -155,16 +165,11 @@ class GuildRosterBrowser(OwnedView):
                 ),
                 *[
                     discord.SelectOption(
-                        label=entry.name,
+                        label=entry.definition.name,
                         value=entry.id,
                         default=class_id == entry.id,
-                        description=(
-                            None
-                            if entry.id in enabled
-                            else "Disabled for new selections; saved characters remain visible"
-                        ),
                     )
-                    for entry in ALPHABETICAL_CLASSES
+                    for entry in controller.settings.display_classes
                 ],
             ],
             row=0,
@@ -216,8 +221,9 @@ class GuildRosterBrowser(OwnedView):
     async def change_class(self, interaction: discord.Interaction) -> None:
         async def update(guild: discord.Guild) -> None:
             selected = self.values(interaction)[0]
-            if selected != "all" and selected not in REGISTRY:
-                raise UserError("Choose a known class from the roster filters.")
+            require_enabled_filter(
+                self.controller, None if selected == "all" else selected
+            )
             await self.refresh(
                 interaction,
                 user_id=self.user_id,

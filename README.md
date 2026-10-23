@@ -8,7 +8,7 @@ A small, self-hosted Discord bot that helps a World of Warcraft: Forever communi
 
 One public message titled **World of Warcraft Character Manager**, with **Manage Characters**, **My Characters** and, when enabled, **Community Roster** buttons. Character management and roster browsing open private views; the public panel stays unchanged.
 
-1. Choose **Manage Characters → Add Character**, select Paladin, and enter **Primary Name: John** and **Secondary Name: Stormwind** in separate fields. **John Stormwind** automatically becomes your first main and receives the Paladin role.
+1. Choose **Manage Characters → Add Character**, select Paladin, and enter **First Name: John** and **Secondary Name: Stormwind** in separate fields. **John Stormwind** automatically becomes your first main and receives the Paladin role.
 2. Add **Sam Ironforge** as Warrior. Sam becomes an alt, John remains main, and your role stays Paladin.
 3. Select **Sam Ironforge** from the **Change Main** dropdown on your dashboard. Sam becomes main, John automatically becomes an alt, Warrior replaces Paladin, and both character records remain. Switching back works the same way. Two characters of the same class can exchange main status without removing and reassigning that role.
 4. Use **Edit Character** to change either name component or the class while preserving the record and main/alt status. Editing an alt's class does not assign an alt role; editing the main's class synchronizes the main role.

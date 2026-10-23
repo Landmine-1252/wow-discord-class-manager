@@ -54,7 +54,7 @@ class CharacterManager:
     def _promotable(self, character: Character) -> None:
         if character.needs_completion:
             raise UserError(
-                "Complete this character's Primary Name and Secondary Name using Edit Character before selecting it as main. No name has been guessed."
+                "Complete this character's First Name and Secondary Name using Edit Character before selecting it as main. No name has been guessed."
             )
         self._enabled(character.class_id)
 

@@ -34,6 +34,16 @@ def test_canonical_unicode_and_case_comparison(settings):
 
 
 @pytest.mark.parametrize(
+    "first,secondary,label",
+    [("", "Stormwind", "First Name"), ("John", "", "Secondary Name")],
+)
+def test_validation_uses_visible_name_labels(settings, first, secondary, label):
+    with pytest.raises(UserError, match=label) as caught:
+        validate_names(settings, first, secondary)
+    assert "Primary Name" not in str(caught.value)
+
+
+@pytest.mark.parametrize(
     "name",
     [
         "",

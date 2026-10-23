@@ -6,7 +6,6 @@ import discord
 from discord import app_commands
 
 from .character_ui import CharacterController, class_name, safe_text
-from .classes import ALPHABETICAL_CLASSES
 
 
 def build_character_commands(controller: CharacterController) -> app_commands.Group:
@@ -119,13 +118,13 @@ def build_roster_command(controller: CharacterController) -> app_commands.Comman
     @app_commands.allowed_installs(guilds=True, users=False)
     @app_commands.describe(
         member="Filter by Discord member",
-        wow_class="Filter by class, including disabled classes",
+        wow_class="Filter by an enabled class; omit to include all saved characters",
         kind="Show mains, alts or all registered characters",
     )
     @app_commands.choices(
         wow_class=[
-            app_commands.Choice(name=entry.name, value=entry.id)
-            for entry in ALPHABETICAL_CLASSES
+            app_commands.Choice(name=entry.definition.name, value=entry.id)
+            for entry in controller.settings.display_classes
         ],
         kind=[
             app_commands.Choice(name="All characters", value="all"),
