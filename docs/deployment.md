@@ -55,13 +55,46 @@ On startup, stored roles follow their configured names/colors, panels refresh, a
 
 ## Health and reconnection
 
+Each startup checks SQLite integrity, foreign-key consistency and a rollback-only database write before connecting to Discord. It also checks that the local heartbeat file can be written. After authentication, logs identify the public bot/application IDs and command scope, then report installed/allowed servers, role safety and the saved panel's channel permissions and ownership. No token, webhook URL or member roster is printed.
+
+Useful startup events:
+
+| Event | Meaning / next step |
+| --- | --- |
+| `startup_checks_started` | Version and nonsecret configuration summary. |
+| `startup_database_ok` / `startup_health_file_ok` | Local storage checks passed. A failure stops startup with an actionable error. |
+| `discord_authenticated` | Compare the public application ID with the app you invited. |
+| `commands_ready` | Command registration completed for the logged scope. |
+| `startup_no_guilds` | Connected to Discord with no servers; install this application with Guild Install and the `bot` scope. |
+| `startup_guild_missing` | An expected allowlisted or command-registration server is absent. Check its ID and installation. |
+| `guild_skipped` | A joined server is outside the allowlist; no role changes are made there. |
+| `guild_startup_check` | Per-server role and saved-panel diagnostics. |
+| `guild_ready` | That server's role/panel preparation succeeded. |
+| `guild_setup_needs_attention` / `guild_setup_failed` | Follow the diagnostic; preparation retries after 300 seconds. Other servers continue operating. |
+| `startup_health` | Readiness changed to the reported state. |
+
+A fresh installation has no saved panel, so the startup check tells an officer to run `/class setup`. This is not a health failure. Startup checks do not create test members, register fake characters, assign a test role or publish a first-run panel. They cannot prove that every member's visible color will match, because higher colored roles can override it; complete the [ordinary-member acceptance test](discord-setup.md#4-publish-and-test).
+
 ```sh
 docker compose exec bot python -m wow_class_manager.health
 ```
 
-The probe prints `starting`, `connected`, `disconnected`, or an `unresponsive` explanation. It reads an atomically written timestamp and PID, checks that the process exists, and rejects a heartbeat older than 45 seconds. The bot refreshes this file every 10 seconds after checking SQLite. Readiness also requires successful command registration, a ready Gateway and a recent heartbeat acknowledgement. There is no health-check network listener.
+The local probe reports these states:
 
-Docker gives startup a 90-second grace period, then probes every 30 seconds. Starting/disconnected/unresponsive return failure; only connected returns success. The health status checks process/Gateway/storage liveness, not every guild's permissions; use `/class status` for guild-specific diagnostics. A brief outage is handled by discord.py's reconnect logic. An unhealthy status alone **does not restart a container in standard Docker Compose**; the restart policy handles process exits. Inspect persistent unhealthiness and use `docker compose restart` if needed.
+| State | Meaning |
+| --- | --- |
+| `starting` | Initial checks or command registration are still pending. |
+| `waiting_for_guild` | Discord is connected, but no installed server is eligible for management. Check the installation and allowlist. |
+| `degraded` | A server check or command registration failed, or an expected server is missing. Check the log diagnostics; other ready servers remain usable. |
+| `connected` | Gateway, command registration and eligible-server checks have passed. |
+| `disconnected` | The Gateway is unavailable; automatic reconnection continues. |
+| `unresponsive` | The heartbeat/process check failed or became stale. |
+
+It reads an atomically written timestamp and PID, checks that the process exists, and rejects a heartbeat older than 45 seconds. The bot refreshes this file every 10 seconds after checking SQLite. Readiness requires a ready Gateway and a recent heartbeat acknowledgement as well as successful startup checks. Server diagnostics use cached startup/join results; the local probe does not make Discord API calls or scan members every ten seconds. Use `/class status` for a fresh server-specific report. There is no health-check network listener.
+
+An explicitly configured application ID that differs from the authenticated application, or a configured Discord Interactions Endpoint URL, stops startup with instructions to correct it. The bot requires Gateway delivery; an HTTP interactions endpoint would route requests away from it.
+
+Docker gives startup a 90-second grace period, then probes every 30 seconds. Only `connected` returns success; all other states return failure with an explanation. Joining an eligible server triggers checks automatically, including when the container started before the invite. A brief outage is handled by discord.py's reconnect logic. An unhealthy status alone **does not restart a container in standard Docker Compose**; the restart policy handles process exits. Inspect persistent unhealthiness and use `docker compose restart` if needed. Command-registration failures retry after 60 seconds.
 
 ## Docker secrets
 

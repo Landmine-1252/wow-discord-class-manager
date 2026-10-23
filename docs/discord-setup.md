@@ -43,6 +43,8 @@ The portal's [official installation guide](https://github.com/discord/discord-ap
 
 Open the installation link, choose **Add to Server**, select your server and authorize. Your account needs permission to manage that server. You can invite before or after starting the container. When the bot first connects or joins, it reconciles the enabled class roles automatically.
 
+Verify the bot appears under **Server Settings → Members**. Installing the app only on your own account, or authorizing commands without the `bot` scope, does not add the bot member needed to manage roles. `commands_ready` confirms command registration, while `gateway_ready guild_count=0` means there were no connected servers at that startup snapshot. If you invited after that line, look for a later `guild_ready` or restart once to check the fresh count. See [connection troubleshooting](troubleshooting.md#connected-to-discord-but-guild_count0).
+
 In Discord, open **Server Settings → Roles**. Drag the bot's highest role above all class roles. Manage Roles only allows the bot to manage roles below its highest role; granting the permission alone cannot bypass the hierarchy. The bot never reorders anything itself.
 
 Existing roles are reused by case-insensitive name only when there is one match, no assigned permissions, no channel override granting permissions, and the role is below the bot. Integration-managed roles are rejected. For conflicts, rename unwanted roles or choose distinct configured names, then run `/class sync`. Never remove security permissions from a real officer role just to make it adoptable; use a separate cosmetic class role.
@@ -53,13 +55,15 @@ Discord uses a member's highest colored role for their displayed name. If office
 
 1. Create a normal server text channel, for example `#guild-characters`. A forum, thread, voice channel or DM is not a supported panel destination.
 2. Let intended members view the channel and use application commands. You can make it read-only for ordinary chat; members can still use native components. Ensure the bot has all five relevant permissions described above (Manage Roles at server scope and the four channel permissions in this channel).
-3. Start the container using the [deployment guide](deployment.md). Wait for `gateway_ready` and `commands_ready` in the logs.
+3. Start the container using the [deployment guide](deployment.md). Check its startup diagnostics, `commands_ready`, and `guild_ready` for your server. An unconfigured panel is expected before the first setup command; missing roles or permissions need attention.
 4. With Manage Server and Manage Roles, type `/class setup` in that channel. Alternatively use `/class setup channel:#guild-characters`. The same setup command publishes **World of Warcraft Character Manager**, with **Manage Characters**, **My Characters** and, when enabled, **Community Roster** buttons. Rerunning setup updates the saved bot message.
 5. Check the private setup summary for warnings. Run `/class status` if anything is missing.
 6. Test with an ordinary member account: click **Manage Characters → Add Character**, choose **Paladin**, and enter **John** and **Stormwind** in the separate Primary Name and Secondary Name fields. John Stormwind becomes main and receives the Paladin role. Add **Sam Ironforge** as **Warrior**; Sam becomes an alt and Paladin remains assigned. Select Sam in the dashboard's **Change Main** dropdown and confirm Warrior replaces Paladin while John automatically becomes an alt. The private dashboard refreshes after each change; unrelated roles must stay.
 7. Restart the container and test the **same panel** again. No replacement panel or duplicate roles should appear.
 
 If your operator changes command names, replace `/class` and the subcommand names in these examples with the configured names.
+
+Administrators do not need a registered character to run setup. `/class setup` publishes the shared panel; `/character add` registers a personal character. A request to change, edit or remove a character before registering one returns you to the first-character workflow.
 
 ## 5. Member self-service
 
@@ -75,6 +79,8 @@ Members can manage their own characters without an officer:
 | View guild characters | Community Roster → class, main/alt or member filter | `/roster` |
 
 Main selection is one operation: the old main automatically becomes an alt. Selecting John Stormwind again switches back without recreating either record. Editing Sam Ironforge while Sam is an alt does not assign another class role. Editing the main's class changes its Discord role after validation. Names can be edited independently; the internal character ID and main/alt designation stay the same.
+
+Class choices are alphabetical by their game names in dropdowns, character forms and slash commands. The default choices are Druid, Hunter, Mage, Paladin, Priest, Rogue, Shaman, Warlock and Warrior. Custom Discord role names do not change this order; optional modern classes join the same alphabetical list when enabled.
 
 Members can share characters they plan to play, even before creating them in game. Both name parts remain required; enter the intended names and edit them when plans change. No record is fabricated from a Discord name or class role, and registration does not verify game ownership or name availability.
 

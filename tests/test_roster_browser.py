@@ -73,7 +73,14 @@ async def test_browser_native_filters_include_disabled_classes_and_selected_defa
         next(option for option in browser.class_filter.options if option.default).value
         == "evoker"
     )
-    assert "Disabled" in browser.class_filter.options[-1].description
+    assert (
+        "Disabled"
+        in next(
+            option
+            for option in browser.class_filter.options
+            if option.value == "evoker"
+        ).description
+    )
     assert (
         next(option for option in browser.kind_filter.options if option.default).value
         == "alts"

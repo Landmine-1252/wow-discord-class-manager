@@ -2,6 +2,37 @@
 
 Start with `docker compose logs --tail=100 bot`, `docker compose ps`, and `/class status` in the affected server. Status requires Manage Server. Setup and sync require both Manage Server and Manage Roles. Substitute your configured command names when customized. Never paste `.env`, token files, webhook URLs or complete container inspect output into a public issue.
 
+## Connected to Discord, but `guild_count=0`
+
+`gateway_ready guild_count=0` means the authenticated bot had no servers in its Gateway cache at that moment. `commands_ready scope=global` means command registration succeeded; it does not prove that the bot user joined a server. An app installed only for commands or on a personal account can make its commands visible without adding the bot member needed for role management.
+
+1. In Developer Portal → Installation, enable **Guild Install** and include both **`bot`** and **`applications.commands`** in its scopes. Reopen the installation link, choose **Add to Server**, select the intended server and complete authorization. Discord documents the distinction in its [bot authorization reference](https://docs.discord.com/developers/topics/oauth2#bot-authorization-flow).
+2. Check **Server Settings → Members** for the bot itself. Seeing an app under Integrations or seeing slash commands alone is not enough.
+3. Compare the logged application ID with the application whose installation link you used. The token must come from that application's **Bot** page. Setting `DISCORD_APPLICATION_ID` does not change the account authenticated by the token; never print the token to compare it.
+4. If you invited the bot after startup, the old `gateway_ready` line is a historical snapshot. Look for a later `guild_ready`, or restart once and inspect the fresh count.
+5. Check `ALLOWED_GUILD_IDS` against your server ID. The allowlist does not reduce the logged Gateway guild count, but it can prevent a joined server from being managed.
+
+Global registration is valid. If you expected guild-scoped registration, set both `COMMAND_SYNC_SCOPE=guild` and `DEVELOPMENT_GUILD_ID` to your server ID, then recreate/apply the container. Changing scope will not install a missing bot user. Do not enable privileged intents or open network ports to fix this condition.
+
+## Setup reports a missing Discord resource
+
+Older logs containing only `error_type=NotFound` cannot identify the missing resource. That exception can represent an unknown guild, channel, message or expired interaction; it does not prove that a panel was deleted. Current error logs include the HTTP status, Discord error code and operation so the next failure can be distinguished without exposing request bodies or credentials.
+
+| Discord code | What to check |
+| --- | --- |
+| `10004` — Unknown Guild | Confirm the bot member joined this server and the token belongs to the invited application. |
+| `10003` — Unknown Channel | Choose an existing server text channel and verify the bot can access it. |
+| `10008` — Unknown Message | A saved panel may have been deleted; run `/class setup` in the intended channel. |
+| `10062` — Unknown Interaction | Open a fresh command or panel interaction; an expired interaction cannot be revived by recreating roles. |
+| `10015` — Unknown Webhook | An interaction response may have expired; open a fresh interaction. This does not necessarily concern the optional admin notification webhook. |
+| `50001` / `50013` — Missing Access / Permissions | Check server installation, channel visibility, Manage Roles and role hierarchy. |
+
+These codes are defined in [Discord's error-code reference](https://docs.discord.com/developers/topics/opcodes-and-status-codes#json). Share the safe event/code fields and the action you attempted when reporting a problem, never a token or full interaction payload.
+
+## First-time setup says there are no registered characters
+
+Publishing the server panel does not require the administrator to register a character. Run **`/class setup`** in the intended text channel. Then use **Manage Characters → Add Character** or **`/character add`** to create your personal roster. Change Main, Edit Character and Remove Character need an existing character; an empty roster is normal before the first registration. Their slash commands open the empty dashboard with an Add Character button instead of leaving you at a dead end. Your first character becomes main automatically.
+
 ## Bot is online but commands do not appear
 
 - Confirm Guild Install includes `bot` and `applications.commands`. Reopen the installation link if scopes were missing.
@@ -94,6 +125,8 @@ Run `/class setup` in a suitable text channel. A deleted stored message is recre
 Ensure `/data` is a writable volume owned by UID/GID `10001:10001`, with enough free disk space. SQLite must write WAL, SHM and lock files in the same directory. A read-only root filesystem is expected; writing the database outside the mounted directory is not. Do not use an NTFS/network bind mount for production SQLite. Check rootless Podman user mappings and SELinux labels. Another process holding the database lock is a configuration error; run only one instance. Corrupt or newer databases require restoration or a compatible image, not deletion. See [backup and restore](deployment.md#backup-and-restore).
 
 ## Bot disconnects repeatedly / container stays unhealthy
+
+Run `docker compose exec bot python -m wow_class_manager.health` first. `waiting_for_guild` means the application connected but needs an eligible server installation; see the zero-guild section above. `degraded` means a startup/server check or command registration failed, or an expected server is absent. Follow `guild_check_warning`, `guild_setup_needs_attention`, `startup_guild_missing` or `command_registration_failed` in the logs. One failed server can make the container degraded while another server remains usable. A missing first-run panel alone is normal and only requires `/class setup`.
 
 Check host clock, DNS and outbound HTTPS/WebSockets, then [Discord's service status](https://discordstatus.com/). Confirm host resources are adequate and no second process uses the same application. Gateway interruptions reconnect automatically. A stale heartbeat indicates an unresponsive loop/storage; `docker compose exec bot python -m wow_class_manager.health` gives the local probe result. Standard Compose does not restart a running container solely because it is unhealthy. Investigate logs, then restart if required. Do not open inbound ports or enable privileged intents as a workaround.
 

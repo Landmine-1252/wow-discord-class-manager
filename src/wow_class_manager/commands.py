@@ -12,7 +12,7 @@ from discord import app_commands
 from . import diagnostics
 from .character_ui import CharacterController
 from .config import SUBCOMMANDS
-from .roles import UserError, api_problem, require_guild
+from .roles import UserError, api_problem, require_bot_member, require_guild
 from .storage import StorageError
 from .ui import PanelManager
 
@@ -66,9 +66,11 @@ class Controller:
         task = asyncio.current_task()
         if task is not None:
             self.active.add(task)
+        operation = "acknowledge_interaction"
         try:
             if not interaction.response.is_done():
                 await interaction.response.defer(ephemeral=True, thinking=True)
+            operation = "validate_context"
             if self.stopping:
                 raise UserError("The bot is restarting. Please try again shortly.")
             guild = require_guild(self.settings, interaction.guild)
@@ -92,6 +94,8 @@ class Controller:
                     )
             if action in {"setup", "sync", "status"}:
                 authorize(interaction, roles=action in {"setup", "sync"})
+            if action not in {"status", "help"}:
+                require_bot_member(guild)
             if action == "setup":
                 target = channel or interaction.channel
                 if (
@@ -114,8 +118,11 @@ class Controller:
                         f"A panel already exists in another channel. To move it, run {self.settings.command('setup')} with the channel option explicitly selected."
                     )
                 # Validate channel permissions before creating any roles.
+                operation = "fetch_setup_channel"
                 await self.panels._channel(guild, target.id)
+                operation = "reconcile_roles"
                 result = await self.bot.roles.reconcile(guild)
+                operation = "publish_panel"
                 saved, warnings = await self.panels.setup(guild, target.id)
                 result.warnings.extend(warnings)
                 text = (
@@ -127,6 +134,7 @@ class Controller:
                     f"Class panel setup completed in guild {guild.id}.\n{result.summary()}",
                 )
             elif action == "sync":
+                operation = "reconcile_roles"
                 result = await self.bot.roles.reconcile(guild)
                 text = result.summary()
                 if result.warnings:
@@ -135,14 +143,18 @@ class Controller:
                         f"Role sync needs attention in guild {guild.id}.\n{text}",
                     )
             elif action == "status":
+                operation = "guild_diagnostics"
                 text = await diagnostics.status(self.settings, self.store, guild)
             elif action == "set":
+                operation = "change_class"
                 text = await self.bot.members.change(
                     guild, interaction.user.id, class_id if class_id is not None else ""
                 )
             elif action == "clear":
+                operation = "clear_class"
                 text = await self.bot.members.change(guild, interaction.user.id, None)
             elif action == "me":
+                operation = "read_member_class"
                 roster = (
                     await self.bot.characters.roster(guild, interaction.user.id)
                     if self.settings.enable_character_management
@@ -161,15 +173,36 @@ class Controller:
                 if self.settings.allow_clear_selection:
                     text += f"\n{self.settings.command('clear')} clears a legacy class-only selection. Registered characters use Remove Character with a replacement main, or remove the last character when clearing is enabled."
                 text += f"\nOfficers: {self.settings.command('setup')} publishes the panel, {self.settings.command('sync')} reconciles roles, and {self.settings.command('status')} checks permissions and colors."
+            operation = "send_confirmation"
             await respond(interaction, self.bot.redact(text))
+            if action in {"setup", "sync"}:
+                check = getattr(self.bot, "check_guild", None)
+                if check is not None:
+                    try:
+                        await check(guild)
+                    except Exception as error:
+                        # Setup already succeeded. A separate diagnostic failure
+                        # must not turn its confirmed response into a failure.
+                        log.warning(
+                            "guild_diagnostics_failed guild_id=%s error_type=%s",
+                            guild.id,
+                            type(error).__name__,
+                        )
         except Exception as error:
-            await self.handle_error(interaction, error)
+            await self.handle_error(
+                interaction, error, action=action, operation=operation
+            )
         finally:
             if task is not None:
                 self.active.discard(task)
 
     async def handle_error(
-        self, interaction: discord.Interaction, error: Exception
+        self,
+        interaction: discord.Interaction,
+        error: Exception,
+        *,
+        action: str = "interaction",
+        operation: str = "dispatch",
     ) -> None:
         error = getattr(error, "original", error)
         if isinstance(error, (UserError, StorageError)):
@@ -180,9 +213,13 @@ class Controller:
             message = "The request could not be completed. Please try again; ask an officer to check the bot logs if it persists."
         if not isinstance(error, UserError):
             log.error(
-                "interaction_failed guild_id=%s error_type=%s",
+                "interaction_failed guild_id=%s action=%s operation=%s error_type=%s http_status=%s discord_code=%s",
                 interaction.guild_id,
+                action,
+                operation,
                 type(error).__name__,
+                error.status if isinstance(error, discord.HTTPException) else None,
+                error.code if isinstance(error, discord.HTTPException) else None,
             )
             self.bot.notifier.notify(
                 f"error:{interaction.guild_id}",
@@ -190,9 +227,13 @@ class Controller:
             )
         try:
             await respond(interaction, self.bot.redact(message))
-        except discord.HTTPException:
+        except discord.HTTPException as response_error:
             log.warning(
-                "interaction_response_unavailable guild_id=%s", interaction.guild_id
+                "interaction_response_unavailable guild_id=%s action=%s http_status=%s discord_code=%s",
+                interaction.guild_id,
+                action,
+                response_error.status,
+                response_error.code,
             )
 
 
@@ -248,7 +289,7 @@ def build_commands(controller: Controller) -> app_commands.Group:
             command = app_commands.choices(
                 wow_class=[
                     app_commands.Choice(name=entry.definition.name, value=entry.id)
-                    for entry in settings.classes
+                    for entry in settings.display_classes
                 ]
             )(command)
         group.add_command(command)

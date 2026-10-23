@@ -8,7 +8,7 @@ import discord
 
 from .character_ui import CharacterView
 from .config import Settings
-from .roles import Locks, UserError, require_guild
+from .roles import Locks, UserError, require_bot_member, require_guild
 from .storage import Panel, Store
 
 if TYPE_CHECKING:
@@ -45,7 +45,7 @@ class ClassSelect(discord.ui.Select):
             max_values=1,
             options=[
                 discord.SelectOption(label=entry.definition.name, value=entry.id)
-                for entry in controller.settings.classes
+                for entry in controller.settings.display_classes
             ],
         )
         self.controller = controller
@@ -117,14 +117,11 @@ class PanelManager:
     async def _channel(
         self, guild: discord.Guild, channel_id: int
     ) -> discord.TextChannel:
+        require_bot_member(guild)
         channel = await guild.fetch_channel(channel_id)
         if not isinstance(channel, discord.TextChannel) or channel.guild.id != guild.id:
             raise UserError(
                 "Choose a server text channel for the class panel; threads, forums and DMs are not supported."
-            )
-        if guild.me is None:
-            raise UserError(
-                "The bot's server membership is not ready; try again shortly."
             )
         missing = missing_channel_permissions(channel, guild.me)
         if missing:
@@ -149,8 +146,11 @@ class PanelManager:
         if previous and previous.channel_id == channel.id:
             try:
                 message = await channel.fetch_message(previous.message_id)
-            except discord.NotFound:
-                pass
+            except discord.NotFound as error:
+                if error.code != 10008:
+                    # A missing guild/channel is not evidence that this message
+                    # was deleted. Preserve the mapping and surface that cause.
+                    raise
             if message and message.author.id != self.controller.bot.user.id:
                 raise UserError(
                     "The stored panel is not owned by this bot. Restore the correct database/token pair; no message was changed."
@@ -161,13 +161,19 @@ class PanelManager:
             else ClassView(self.controller)
         )
         if message is not None:
-            await message.edit(
-                content=None,
-                embed=self.embed(),
-                view=view,
-                allowed_mentions=discord.AllowedMentions.none(),
-            )
-        else:
+            try:
+                await message.edit(
+                    content=None,
+                    embed=self.embed(),
+                    view=view,
+                    allowed_mentions=discord.AllowedMentions.none(),
+                )
+            except discord.NotFound as error:
+                if error.code != 10008:
+                    raise
+                # An administrator can delete the panel between fetch and edit.
+                message = None
+        if message is None:
             message = await channel.send(
                 embed=self.embed(),
                 view=view,

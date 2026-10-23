@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 import discord
 
 from .character_ui import OwnedView, class_name, page_slice, safe_text
-from .classes import REGISTRY
+from .classes import ALPHABETICAL_CLASSES, REGISTRY
 from .roles import UserError
 
 if TYPE_CHECKING:
@@ -164,7 +164,7 @@ class GuildRosterBrowser(OwnedView):
                             else "Disabled for new selections; saved characters remain visible"
                         ),
                     )
-                    for entry in REGISTRY.values()
+                    for entry in ALPHABETICAL_CLASSES
                 ],
             ],
             row=0,

@@ -8,6 +8,7 @@ import signal
 
 import discord
 
+from . import __version__
 from .bot import ClassBot
 from .config import ConfigError, Settings
 from .health import write_health
@@ -21,9 +22,33 @@ async def run(settings: Settings) -> None:
     redact = configure_logging(
         settings.log_level, settings.token, settings.admin_webhook_url or ""
     )
+    log.info(
+        "startup_checks_started version=%s command_scope=%s enabled_classes=%s allowed_guild_count=%s",
+        __version__,
+        settings.command_sync_scope,
+        len(settings.classes),
+        len(settings.allowed_guild_ids),
+    )
     store = Store(settings.database_path)
     await store.open()
-    bot = ClassBot(settings, store, redact)
+    try:
+        schema_version = await store.check_health()
+        log.info(
+            "startup_database_ok schema_version=%s integrity=ok writable=ok",
+            schema_version,
+        )
+        try:
+            await asyncio.to_thread(write_health, settings.health_path, "starting")
+        except OSError:
+            log.error(
+                "startup_health_file_failed; check HEALTH_PATH and writable /tmp permissions"
+            )
+            raise
+        log.info("startup_health_file_ok")
+        bot = ClassBot(settings, store, redact)
+    except BaseException:
+        await store.close()
+        raise
     loop = asyncio.get_running_loop()
     stopped = asyncio.Event()
     for signum in (signal.SIGINT, signal.SIGTERM):
@@ -31,7 +56,6 @@ async def run(settings: Settings) -> None:
     connection: asyncio.Task | None = None
     shutdown: asyncio.Task | None = None
     try:
-        await asyncio.to_thread(write_health, settings.health_path, "starting")
         async with bot:
             connection = asyncio.create_task(
                 bot.start(settings.token, reconnect=True), name="discord-connection"

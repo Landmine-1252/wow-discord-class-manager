@@ -6,7 +6,7 @@ import discord
 from discord import app_commands
 
 from .character_ui import CharacterController, class_name, safe_text
-from .classes import REGISTRY
+from .classes import ALPHABETICAL_CLASSES
 
 
 def build_character_commands(controller: CharacterController) -> app_commands.Group:
@@ -125,7 +125,7 @@ def build_roster_command(controller: CharacterController) -> app_commands.Comman
     @app_commands.choices(
         wow_class=[
             app_commands.Choice(name=entry.name, value=entry.id)
-            for entry in REGISTRY.values()
+            for entry in ALPHABETICAL_CLASSES
         ],
         kind=[
             app_commands.Choice(name="All characters", value="all"),

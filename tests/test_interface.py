@@ -235,7 +235,7 @@ async def test_status_missing_deleted_unmanageable(controller, guild):
     guild.roles.append(FakeRole(9999, "Officer", 200, discord.Colour(123)))
     report = await status(controller.settings, controller.store, guild)
     assert (
-        "deleted" in report
+        "cannot find that message" in report
         and "move the bot" in report
         and "colored roles: 1" in report
     )

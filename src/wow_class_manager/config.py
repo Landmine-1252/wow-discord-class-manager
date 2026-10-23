@@ -74,6 +74,13 @@ class Settings:
     character_panel_title: str = "World of Warcraft Character Manager"
     allow_character_class_edit: bool = True
 
+    @property
+    def display_classes(self) -> tuple[ClassRole, ...]:
+        """Order member-facing choices by canonical label, preserving role identity."""
+        return tuple(
+            sorted(self.classes, key=lambda entry: entry.definition.name.casefold())
+        )
+
     def allowed(self, guild_id: int) -> bool:
         return not self.allowed_guild_ids or guild_id in self.allowed_guild_ids
 

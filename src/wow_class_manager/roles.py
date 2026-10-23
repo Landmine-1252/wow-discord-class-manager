@@ -42,6 +42,18 @@ def require_guild(settings: Settings, guild: discord.Guild | None) -> discord.Gu
     return guild
 
 
+def require_bot_member(guild: discord.Guild) -> None:
+    # Interactions can supply a partial Guild even when only application commands
+    # were installed. discord.py always caches the bot's own member when joined.
+    if guild.me is None:
+        raise UserError(
+            "The bot's membership in this server is not available. An administrator "
+            "should install this application using Guild Install with both bot and "
+            "applications.commands scopes. If it was just invited, wait for it to "
+            "connect and try again. The container token must belong to that same application."
+        )
+
+
 def unsafe_reason(guild: discord.Guild, role: discord.Role) -> str | None:
     if role.is_default() or role.managed:
         return "the role is @everyone or belongs to another integration"
@@ -59,10 +71,25 @@ def unsafe_reason(guild: discord.Guild, role: discord.Role) -> str | None:
 
 
 def api_problem(error: discord.HTTPException) -> str:
+    # Use Discord's documented numeric codes, never its raw error text: the
+    # latter can include request data or URLs containing interaction secrets.
+    messages = {
+        10002: "Discord cannot find this application. Check that DISCORD_APPLICATION_ID, the bot token and the installation link belong to the same application.",
+        10003: "Discord cannot find the selected channel. Choose an existing server text channel the bot can view, then run setup with that channel selected.",
+        10004: "Discord cannot find this server for the bot. Install the same application using Guild Install with both bot and applications.commands scopes, and check that the container uses its bot token.",
+        10007: "Discord cannot find that server member. Reopen the command from inside the server after confirming membership.",
+        10008: "Discord cannot find that message. Reopen the character menu; if the public panel was deleted, ask an administrator to run setup again.",
+        10011: "Discord cannot find a class role. Ask an administrator to run sync, then retry your selection.",
+        10015: "Discord cannot find this response webhook. The interaction may have expired; reopen the menu or run the command again.",
+        10062: "This interaction is no longer available or was not acknowledged in time. Reopen the menu or run the command again.",
+        10063: "Discord cannot find this application command. Reload Discord and wait for command registration to complete, then try again.",
+    }
+    if error.code in messages:
+        return f"{messages[error.code]} (Discord code {error.code}.)"
     if isinstance(error, discord.Forbidden):
         return "Discord denied access. Check Manage Roles, channel permissions and the bot's role position."
     if isinstance(error, discord.NotFound):
-        return "A Discord resource was deleted. Run setup or sync again."
+        return "Discord could not find the requested resource. Retry the action; if it persists, ask an officer to check the bot logs for the Discord error code."
     return "Discord could not complete the request. Try again shortly; check the bot logs if it persists."
 
 

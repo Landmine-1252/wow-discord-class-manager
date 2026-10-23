@@ -110,6 +110,40 @@ async def test_public_character_view_is_persistent_and_neutral(character_control
     assert not any(isinstance(item, discord.ui.Select) for item in view.children)
 
 
+@pytest.mark.parametrize("action", ["main", "edit", "remove"])
+async def test_empty_character_actions_offer_working_add_button(
+    character_controller, guild, action
+):
+    call = interaction(guild, guild.member())
+    await character_controller.choose(call, action)
+    reply = call.followup.send.call_args.kwargs
+    assert reply["ephemeral"]
+    assert "first character" in reply["content"]
+    assert reply["embed"].title == "Your Characters"
+    add = next(item for item in reply["view"].children if item.label == "Add Character")
+    assert not add.disabled
+    click = interaction(guild, call.user)
+    click.response.send_modal = AsyncMock()
+    await add.callback(click)
+    modal = click.response.send_modal.call_args.args[0]
+    assert isinstance(modal, CharacterModal)
+    for operation in ("add", "edit", "remove", "promote"):
+        getattr(character_controller.manager, operation).assert_not_called()
+
+
+async def test_partial_guild_character_workflow_explains_installation_before_api(
+    character_controller, guild
+):
+    call = interaction(guild, guild.member())
+    guild.me = None
+    await character_controller.open(call)
+    reply = call.response.send_message.call_args.kwargs
+    assert reply["ephemeral"] and "Guild Install" in reply["content"]
+    character_controller.manager.roster.assert_not_called()
+    character_controller.bot.members.current.assert_not_called()
+    guild.fetch_member.assert_not_called()
+
+
 @pytest.mark.parametrize("visibility,enabled", [("disabled", True), ("members", False)])
 async def test_roster_button_hidden_but_old_callback_can_still_be_registered(
     character_controller, visibility, enabled
@@ -247,9 +281,11 @@ async def test_disabled_class_stays_available_only_for_existing_character_rename
 ):
     old = character(class_id="evoker")
     modal = CharacterModal(character_controller, 123, 456, old)
-    assert modal.class_select.options[-1].value == "evoker"
-    assert modal.class_select.options[-1].default
-    assert "disabled" in modal.class_select.options[-1].label
+    disabled = next(
+        option for option in modal.class_select.options if option.value == "evoker"
+    )
+    assert disabled.default
+    assert "disabled" in disabled.label
     new_modal = CharacterModal(character_controller, 123, 456)
     assert "evoker" not in {entry.value for entry in new_modal.class_select.options}
 

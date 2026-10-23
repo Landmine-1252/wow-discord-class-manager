@@ -92,6 +92,16 @@ async def test_retired_panel_transaction(store):
         ("connected", 0, "connected"),
         ("disconnected", 1, "disconnected"),
         ("stopped", 1, "disconnected"),
+        (
+            "waiting_for_guild",
+            1,
+            "waiting_for_guild: install the bot in an allowed server; check startup logs",
+        ),
+        (
+            "degraded",
+            1,
+            "degraded: startup checks found a configuration or server problem; check logs",
+        ),
     ],
 )
 def test_health_states(tmp_path, state, code, message):
@@ -130,11 +140,13 @@ def test_health_stale_missing_dead_invalid(tmp_path, monkeypatch):
     ],
 )
 async def test_gateway_readiness_updates_health(
-    settings, store, monkeypatch, ready, commands_ready, latency, expected
+    settings, store, guild, monkeypatch, ready, commands_ready, latency, expected
 ):
     bot = ClassBot(settings, store, Redactor())
     bot._ever_ready = True
     bot._commands_ready = commands_ready
+    bot._prepared.add(guild.id)
+    monkeypatch.setattr(ClassBot, "guilds", property(lambda self: [guild]))
     monkeypatch.setattr(ClassBot, "is_ready", lambda self: ready)
     monkeypatch.setattr(ClassBot, "latency", property(lambda self: latency))
 

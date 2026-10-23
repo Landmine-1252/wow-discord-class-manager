@@ -13,7 +13,7 @@ import aiohttp
 import discord
 
 from .classes import REGISTRY
-from .roles import UserError, require_guild
+from .roles import UserError, require_bot_member, require_guild
 from .storage import StorageError
 
 if TYPE_CHECKING:
@@ -182,6 +182,7 @@ class CharacterController:
             raise UserError(
                 "This private character menu belongs to another member or server. Open your own menu."
             )
+        require_bot_member(guild)
         return guild
 
     async def execute(
@@ -197,14 +198,17 @@ class CharacterController:
         task = asyncio.current_task()
         if task is not None:
             self.controller.active.add(task)
+        operation = "validate_context"
         try:
             guild = self.guard(interaction, owner_id=owner_id, guild_id=guild_id)
             update = defer and not panel and self.private_source(interaction)
             message_id = interaction.message.id if update else None
             previous = self._private_views.get(message_id) if update else None
             if defer and not interaction.response.is_done():
+                operation = "acknowledge_interaction"
                 await interaction.response.defer(ephemeral=True, thinking=not update)
             if panel:
+                operation = "validate_panel"
                 saved = await self.store.panel(guild.id)
                 if (
                     not saved
@@ -216,6 +220,7 @@ class CharacterController:
                     raise UserError(
                         "This panel is no longer active. Open the current character panel or use the character commands."
                     )
+            operation = callback.__name__
             if update:
                 lock = self._navigation_locks.setdefault(message_id, asyncio.Lock())
                 async with lock:
@@ -231,7 +236,9 @@ class CharacterController:
                 # Modal launches must be immediate, without waiting for I/O or a lock.
                 await callback(guild)
         except Exception as error:
-            await self.controller.handle_error(interaction, error)
+            await self.controller.handle_error(
+                interaction, error, action="character", operation=operation
+            )
         finally:
             if task is not None:
                 self.controller.active.discard(task)
@@ -435,9 +442,13 @@ class CharacterController:
                 guild, interaction.user.id, reconcile=False
             )
             if not roster.characters:
-                raise UserError(
-                    "You have no registered characters. Use Add Character first."
+                await self.send_roster(
+                    interaction,
+                    roster,
+                    manage=True,
+                    notice="Register your first character below. It will automatically become your main.",
                 )
+                return
             if selected:
                 character = self.owned(roster, selected)
                 if action == "main":
@@ -852,7 +863,7 @@ class CharacterModal(discord.ui.Modal):
                     value=entry.id,
                     default=character is not None and character.class_id == entry.id,
                 )
-                for entry in settings.classes
+                for entry in settings.display_classes
             ]
             if (
                 character
@@ -866,6 +877,7 @@ class CharacterModal(discord.ui.Modal):
                         default=True,
                     )
                 )
+            options.sort(key=lambda option: option.label.casefold())
             self.class_select = discord.ui.Select(
                 custom_id="class_id",
                 placeholder="Choose the character's class",

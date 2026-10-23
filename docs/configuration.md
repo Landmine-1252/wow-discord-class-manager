@@ -16,7 +16,7 @@ Only one token source is required. Other variables are optional unless their doc
 | `ALLOWED_GUILD_IDS` | Servers allowed to use the bot | empty: all installed guilds | No | `123456789012345678,234567890123456789`; all interactions and mutations are rejected outside this list. Bot stays installed but inactive there. |
 | `DEVELOPMENT_GUILD_ID` | Development command target | unset | When scope is `guild` | `123456789012345678`; must be allowed if using an allowlist. |
 | `COMMAND_SYNC_SCOPE` | Registration target | `global` | No | `global` or `guild`; the latter requires a development guild ID. Does not itself restrict role reconciliation; use the allowlist for that. |
-| `ENABLED_CLASSES` | Ordered class IDs to show/manage | `warrior,paladin,hunter,rogue,priest,shaman,mage,warlock,druid` | No | `paladin,mage,death_knight`; case-insensitive IDs, no duplicates or empty entries. |
+| `ENABLED_CLASSES` | Class IDs to show/manage | `warrior,paladin,hunter,rogue,priest,shaman,mage,warlock,druid` | No | `paladin,mage,death_knight`; case-insensitive IDs, no duplicates or empty entries. Displayed choices are alphabetical by class name. |
 | `AUTO_CREATE_ROLES` | Create missing roles | `true` | No | `false` means discover/update existing safe roles only. Missing roles remain unavailable. |
 | `ROLE_NAME_TEMPLATE` | Default visible role names | `{name}` | No | `WoW {name}`; only `{name}` is accepted. Names must be 1–100 characters and unique across all 13 classes, case-insensitively. |
 

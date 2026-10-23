@@ -133,6 +133,35 @@ class Store:
 
         await self._run(finish)
 
+    async def check_health(self) -> int:
+        """Check integrity and write access without committing any application data."""
+
+        def check() -> int:
+            # Serialized with other operations, including cancellation. Never emit
+            # SQLite's detailed integrity report: it may contain roster data.
+            if self.db.execute("PRAGMA quick_check").fetchall() != [("ok",)]:
+                raise StorageError(
+                    "SQLite startup integrity check failed. Stop the bot and restore a verified backup; do not delete the database."
+                )
+            if self.db.execute("PRAGMA foreign_key_check").fetchone() is not None:
+                raise StorageError(
+                    "SQLite startup relationship check failed. Stop the bot and restore a verified backup or have the database repaired."
+                )
+            version = self.db.execute("PRAGMA user_version").fetchone()[0]
+            # A read alone would miss query-only databases and lost write access.
+            # The upsert is rolled back even if a previous diagnostic key exists.
+            self.db.execute("BEGIN IMMEDIATE")
+            try:
+                self.db.execute(
+                    "INSERT INTO metadata VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                    ("startup:write-probe", "check"),
+                )
+            finally:
+                self.db.rollback()
+            return version
+
+        return await self._run(check)
+
     async def roles(self, guild_id: int) -> dict[str, int]:
         return await self._run(
             lambda: dict(

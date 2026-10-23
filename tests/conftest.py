@@ -166,7 +166,10 @@ class FakeGuild:
 
         async def fetch(message_id):
             if message_id not in channel.messages:
-                raise http_error(discord.NotFound)
+                raise discord.NotFound(
+                    SimpleNamespace(status=404, reason="Not Found"),
+                    {"code": 10008, "message": "Unknown Message"},
+                )
             return channel.messages[message_id]
 
         channel.send = AsyncMock(side_effect=send)

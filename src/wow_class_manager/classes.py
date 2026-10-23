@@ -28,6 +28,7 @@ CLASSES = (
 )
 REGISTRY = {entry.id: entry for entry in CLASSES}
 DEFAULT_CLASSES = tuple(entry.id for entry in CLASSES if entry.classic)
+ALPHABETICAL_CLASSES = tuple(sorted(CLASSES, key=lambda entry: entry.name.casefold()))
 
 
 @dataclass(frozen=True, slots=True)
