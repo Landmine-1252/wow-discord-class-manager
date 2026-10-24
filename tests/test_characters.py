@@ -346,7 +346,7 @@ async def test_error_after_successful_commit_does_not_undo_roles(
         raise StorageError("Simulated lost acknowledgment")
 
     monkeypatch.setattr(manager.records, "commit", uncertain)
-    with pytest.raises(UserError, match="Reopen Manage Characters"):
+    with pytest.raises(UserError, match="Reopen My Characters"):
         await manager.promote(guild, member.id, sam.id)
     assert (await manager.records.roster(guild.id, member.id)).main.id == sam.id
     assert await assigned(manager, guild, member) == {"warrior"}

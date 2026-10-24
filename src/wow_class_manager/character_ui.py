@@ -3,15 +3,18 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import math
 import unicodedata
 from collections.abc import Awaitable, Callable, Sequence
+from functools import partial
 from typing import TYPE_CHECKING
 from weakref import WeakValueDictionary
 
 import aiohttp
 import discord
 
+from .character_names import normalized_name_key
 from .classes import REGISTRY
 from .roles import UserError, require_bot_member, require_guild
 from .storage import StorageError
@@ -24,7 +27,10 @@ MANAGE_ID = "wow:character:manage:v1"
 MY_CHARACTERS_ID = "wow:character:list:v1"
 COMMUNITY_ROSTER_ID = "wow:character:roster:v1"
 PAGE_SIZE = 15
-PRIVATE_TIMEOUT = 600
+PRIVATE_TIMEOUT = 300
+log = logging.getLogger(__name__)
+
+type SessionKey = tuple[int, int, int | None]
 
 
 def safe_text(value: str, limit: int = 100) -> str:
@@ -80,19 +86,21 @@ class CharacterView(discord.ui.View):
         super().__init__(timeout=None)
         self.controller = controller
         manage = discord.ui.Button(
-            label="Manage Characters",
+            label="My Characters",
             custom_id=MANAGE_ID,
             style=discord.ButtonStyle.primary,
         )
         manage.callback = self.manage
         self.add_item(manage)
-        mine = discord.ui.Button(
-            label="My Characters",
-            custom_id=MY_CHARACTERS_ID,
-            style=discord.ButtonStyle.secondary,
-        )
-        mine.callback = self.mine
-        self.add_item(mine)
+        if register_all:
+            # Keep older public panels working with their original custom IDs.
+            mine = discord.ui.Button(
+                label="My Characters",
+                custom_id=MY_CHARACTERS_ID,
+                style=discord.ButtonStyle.secondary,
+            )
+            mine.callback = self.mine
+            self.add_item(mine)
         if register_all or (
             controller.settings.enable_guild_roster
             and controller.settings.roster_visibility != "disabled"
@@ -106,10 +114,10 @@ class CharacterView(discord.ui.View):
             self.add_item(browse)
 
     async def manage(self, interaction: discord.Interaction) -> None:
-        await self.controller.characters_ui.open(interaction, manage=True, panel=True)
+        await self.controller.characters_ui.open(interaction, panel=True)
 
     async def mine(self, interaction: discord.Interaction) -> None:
-        await self.controller.characters_ui.open(interaction, manage=False, panel=True)
+        await self.controller.characters_ui.open(interaction, panel=True)
 
     async def browse(self, interaction: discord.Interaction) -> None:
         await self.controller.characters_ui.guild_roster(interaction, panel=True)
@@ -117,7 +125,7 @@ class CharacterView(discord.ui.View):
     async def on_error(
         self, interaction: discord.Interaction, error: Exception, item: discord.ui.Item
     ) -> None:
-        await self.controller.handle_error(interaction, error)
+        await self.controller.handle_error(interaction, error, action="character")
 
 
 class CharacterController:
@@ -129,10 +137,17 @@ class CharacterController:
             controller.store,
         )
         self.manager = self.bot.characters
-        self._navigation_locks: WeakValueDictionary[int, asyncio.Lock] = (
+        self._navigation_locks: WeakValueDictionary[SessionKey, asyncio.Lock] = (
             WeakValueDictionary()
         )
         self._private_views: WeakValueDictionary[int, OwnedView] = WeakValueDictionary()
+        self._private_sessions: WeakValueDictionary[SessionKey, OwnedView] = (
+            WeakValueDictionary()
+        )
+
+    @staticmethod
+    def session_key(interaction: discord.Interaction) -> SessionKey:
+        return interaction.guild_id, interaction.user.id, interaction.channel_id
 
     def private_source(self, interaction: discord.Interaction) -> bool:
         message = interaction.message
@@ -151,6 +166,22 @@ class CharacterController:
         if isinstance(view, OwnedView):
             view.message_id = message_id
             self._private_views[message_id] = view
+
+    async def bind_view(
+        self,
+        interaction: discord.Interaction,
+        message_id: int,
+        view: discord.ui.View | None,
+        delete_message: Callable[[], Awaitable[None]],
+    ) -> None:
+        self.track_view(message_id, view)
+        if isinstance(view, OwnedView):
+            key = self.session_key(interaction)
+            previous = self._private_sessions.get(key)
+            view.session_key, view.delete_message = key, delete_message
+            self._private_sessions[key] = view
+            if previous is not None and previous.message_id != message_id:
+                await previous.dismiss()
 
     def guard(
         self,
@@ -221,8 +252,10 @@ class CharacterController:
                         "This panel is no longer active. Open the current character panel or use the character commands."
                     )
             operation = callback.__name__
-            if update:
-                lock = self._navigation_locks.setdefault(message_id, asyncio.Lock())
+            if defer:
+                lock = self._navigation_locks.setdefault(
+                    self.session_key(interaction), asyncio.Lock()
+                )
                 async with lock:
                     if (
                         previous is not None
@@ -263,18 +296,34 @@ class CharacterController:
             and self.private_source(interaction)
         ):
             await interaction.edit_original_response(**kwargs)
-            self.track_view(interaction.message.id, view)
+            await self.bind_view(
+                interaction,
+                interaction.message.id,
+                view,
+                interaction.delete_original_response,
+            )
         elif interaction.response.is_done():
             message = await interaction.followup.send(
                 **kwargs, ephemeral=True, wait=True
             )
             if message is not None and isinstance(message.id, int):
-                self.track_view(message.id, view)
+                await self.bind_view(interaction, message.id, view, message.delete)
         else:
-            await interaction.response.send_message(**kwargs, ephemeral=True)
+            response = await interaction.response.send_message(**kwargs, ephemeral=True)
+            message_id = response.message_id
+            if isinstance(message_id, int):
+                await self.bind_view(
+                    interaction, message_id, view, interaction.delete_original_response
+                )
 
     async def after_change(
-        self, interaction: discord.Interaction, notice: str, *, page: int = 0
+        self,
+        interaction: discord.Interaction,
+        notice: str,
+        *,
+        page: int = 0,
+        selected_id: int | None = None,
+        selected_name_key: str | None = None,
     ) -> None:
         """Show confirmed success alongside fresh controls without another role write."""
         try:
@@ -285,21 +334,31 @@ class CharacterController:
             await self.send(
                 interaction,
                 content=notice
-                + " Your roster could not refresh. Reopen Manage Characters to view it.",
+                + " Your roster could not refresh. Reopen My Characters to view it.",
                 view=BackView(self, interaction.guild_id, interaction.user.id),
             )
             return
+        if selected_name_key is not None:
+            selected_id = next(
+                (
+                    char.id
+                    for char in roster.characters
+                    if normalized_name_key(char.primary_name, char.secondary_name)
+                    == selected_name_key
+                ),
+                selected_id,
+            )
         await self.send_roster(
-            interaction, roster, manage=True, page=page, notice=notice
+            interaction, roster, page=page, notice=notice, selected_id=selected_id
         )
 
     async def open(
         self,
         interaction: discord.Interaction,
         *,
-        manage: bool = True,
         panel: bool = False,
         page: int = 0,
+        selected_id: int | None = None,
     ) -> None:
         async def display(guild: discord.Guild) -> None:
             warning = ""
@@ -335,7 +394,7 @@ class CharacterController:
                 ):
                     warning = "Register your main character to begin. Existing class roles remain until registration succeeds."
             await self.send_roster(
-                interaction, roster, manage=manage, page=page, warning=warning
+                interaction, roster, page=page, warning=warning, selected_id=selected_id
             )
 
         await self.execute(interaction, display, panel=panel)
@@ -345,16 +404,37 @@ class CharacterController:
         interaction: discord.Interaction,
         roster: Roster,
         *,
-        manage: bool,
         page: int = 0,
         warning: str = "",
         notice: str | None = None,
+        selected_id: int | None = None,
     ) -> None:
         ordered = sorted(
             roster.characters, key=lambda char: (not char.is_main, char.id)
         )
+        if selected_id is not None:
+            page = next(
+                (
+                    index // PAGE_SIZE
+                    for index, char in enumerate(ordered)
+                    if char.id == selected_id
+                ),
+                page,
+            )
         entries, page, pages = page_slice(ordered, page)
-        lines = ["Share what you plan to play. You can change your main anytime."]
+        limit = self.settings.max_characters_per_user
+        at_limit = bool(limit and len(ordered) >= limit)
+        selected = next(
+            (char for char in entries if char.id == selected_id),
+            entries[0] if entries else None,
+        )
+        lines = (
+            [
+                "Choose a character, then choose what to do. Only your main sets your class role."
+            ]
+            if entries
+            else []
+        )
         if warning:
             lines.append(safe_text(warning, 700) + "\n")
         for character in entries:
@@ -365,24 +445,43 @@ class CharacterController:
             )
         if not entries:
             lines.append(
-                "Start with Add Character below. Enter both name parts and pick a class from the dropdown. Your first character becomes your main; later characters become alts. Planned names are welcome."
+                "Start with Add Character below. Enter both name parts and choose a class. Your first character becomes your main and sets your class role. You can add alts or change your plans later."
             )
         elif roster.main is None:
             lines.append(
-                "\nNo main is designated. Complete any unfinished name, then choose your main from the dropdown."
+                "\nNo main is designated. Complete any unfinished name, select a character, then choose Make Main."
+            )
+        if at_limit:
+            lines.append(
+                f"You have reached this server's limit of {limit} characters. Edit or remove a character before adding another."
             )
         if any(character.needs_completion for character in entries):
-            lines.append(
-                "Use Edit Character to complete each unfinished two-part name."
-            )
+            lines.append("Use Edit to complete each unfinished two-part name.")
         embed = discord.Embed(
             title="Your Characters",
             description="\n\n".join(lines),
             colour=self.settings.panel_accent_color,
         )
         embed.set_footer(
-            text=f"Page {page + 1}/{pages} • {len(ordered)} characters • Plans can change • Menus last 10 minutes"
+            text=f"Page {page + 1}/{pages} • {len(ordered)} character{'s' if len(ordered) != 1 else ''} • Closes after 5 minutes idle"
         )
+        if selected:
+            detail = f"{safe_text(selected.full_name, 110)} • {class_name(selected.class_id)} • {'Main' if selected.is_main else 'Alt'}"
+            if (
+                selected.is_main
+                and len(ordered) == 1
+                and not self.settings.allow_clear_selection
+            ):
+                detail += "\nThis server requires a main character. Edit this character or add a replacement before removing it."
+            if selected.needs_completion:
+                detail += "\nComplete both name fields with Edit before making this your main."
+            if selected.class_id not in {entry.id for entry in self.settings.classes}:
+                detail += (
+                    "\nThis class is disabled. Edit the class or choose another character to make main."
+                    if self.settings.allow_character_class_edit
+                    else "\nThis class is disabled. Choose a character with an enabled class to make main."
+                )
+            embed.add_field(name="Selected Character", value=detail, inline=False)
         if roster.main is not None and page > 0:
             embed.add_field(
                 name="Current Main",
@@ -397,10 +496,12 @@ class CharacterController:
                 self,
                 interaction.guild_id,
                 interaction.user.id,
-                manage,
                 page,
                 pages,
                 entries,
+                selected=selected,
+                total_characters=len(ordered),
+                can_add=not at_limit and (not ordered or roster.main is not None),
             ),
         )
 
@@ -445,7 +546,6 @@ class CharacterController:
                 await self.send_roster(
                     interaction,
                     roster,
-                    manage=True,
                     notice="Register your first character below. It will automatically become your main.",
                 )
                 return
@@ -525,7 +625,7 @@ class CharacterController:
             return
         if character.is_main and not self.settings.allow_clear_selection:
             raise UserError(
-                "Removing your last main is disabled. Ask the operator about ALLOW_CLEAR_SELECTION, or register a replacement character first."
+                "Removing your last character is disabled for this server. Edit it, add a replacement, or ask an officer to allow an empty roster."
             )
         await self.confirm_removal(interaction, character, None)
 
@@ -553,7 +653,7 @@ class CharacterController:
             root = self.settings.character_command_root
             await self.send(
                 interaction,
-                content=f"Use `/{root} add` or Manage Characters to enter a First Name, Secondary Name, and class. Your first character becomes main; later characters become alts.\n`/{root} main` switches mains in one step and automatically makes the previous main an alt. Only your main sets your Discord class role.\n`/{root} list`, `/{root} edit` and `/{root} remove` show, change or remove your registered characters. Removal always asks for confirmation.\nNames and ownership are self-reported; registration does not verify game availability or ownership.",
+                content=f"Open My Characters to add a character or select one to Edit, Make Main or Remove. Enter a First Name, Secondary Name and class when adding. Your first character becomes main; later characters become alts.\n`/{root} main` switches mains and automatically makes the previous main an alt. Only your main sets your Discord class role.\n`/{root} list`, `/{root} edit` and `/{root} remove` also open private workflows. Removal always asks for confirmation.\nDone closes your menu; inactive menus close after five minutes. Names and ownership are self-reported; registration does not verify game availability or ownership.",
                 view=BackView(self, guild.id, interaction.user.id),
             )
 
@@ -612,6 +712,49 @@ class OwnedView(discord.ui.View):
         super().__init__(timeout=PRIVATE_TIMEOUT)
         self.controller, self.guild_id, self.owner_id = controller, guild_id, owner_id
         self.message_id: int | None = None
+        self.session_key: SessionKey | None = None
+        self.delete_message: Callable[[], Awaitable[None]] | None = None
+        self.button("Done", self.done, row=4)
+
+    async def dismiss(self) -> None:
+        """Retire only this private menu, even if a new menu already replaced it."""
+        self.stop()
+        if self.controller._private_views.get(self.message_id) is self:
+            self.controller._private_views.pop(self.message_id, None)
+        if self.controller._private_sessions.get(self.session_key) is self:
+            self.controller._private_sessions.pop(self.session_key, None)
+        if self.delete_message is not None:
+            try:
+                await self.delete_message()
+            except discord.NotFound:
+                pass  # Already dismissed in the client.
+            except (discord.HTTPException, aiohttp.ClientError, OSError, TimeoutError):
+                # Tokens expire and restarts can interrupt cleanup. Never log URLs.
+                log.warning("private_menu_cleanup_failed guild_id=%s", self.guild_id)
+
+    async def on_timeout(self) -> None:
+        if self.session_key is None:
+            return
+        lock = self.controller._navigation_locks.setdefault(
+            self.session_key, asyncio.Lock()
+        )
+        async with lock:
+            if self.controller._private_views.get(self.message_id) is self:
+                await self.dismiss()
+
+    async def done(self, interaction: discord.Interaction) -> None:
+        async def close(guild: discord.Guild) -> None:
+            if not self.controller.private_source(interaction):
+                raise UserError("Open your private character menu to close it.")
+            # Use this click's fresh token, not the original menu's token.
+            try:
+                await interaction.delete_original_response()
+            except discord.NotFound:
+                pass
+            self.delete_message = None
+            await self.dismiss()
+
+        await self.run(interaction, close)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         try:
@@ -623,11 +766,23 @@ class OwnedView(discord.ui.View):
                 and self.controller._private_views.get(self.message_id) is not self
             ):
                 raise UserError(
-                    "This menu has been replaced or expired. Use the current controls or reopen Manage Characters."
+                    "This menu has been replaced or expired. Use the current controls or reopen My Characters."
+                )
+            if (
+                self.message_id is not None
+                and self.controller.private_source(interaction)
+                and interaction.message.id == self.message_id
+            ):
+                # Even opening/cancelling a modal renews the idle timer. Keep a
+                # fresh webhook token so cleanup also works in long sessions.
+                self.delete_message = partial(
+                    interaction.followup.delete_message, self.message_id
                 )
             return True
         except UserError as error:
-            await self.controller.controller.handle_error(interaction, error)
+            await self.controller.controller.handle_error(
+                interaction, error, action="character"
+            )
             return False
 
     async def run(
@@ -650,7 +805,9 @@ class OwnedView(discord.ui.View):
     async def on_error(
         self, interaction: discord.Interaction, error: Exception, item: discord.ui.Item
     ) -> None:
-        await self.controller.controller.handle_error(interaction, error)
+        await self.controller.controller.handle_error(
+            interaction, error, action="character"
+        )
 
     def button(
         self,
@@ -682,40 +839,69 @@ class RosterView(OwnedView):
         controller: CharacterController,
         guild_id: int,
         owner_id: int,
-        manage: bool,
         page: int,
         pages: int,
         characters: Sequence[Character],
+        *,
+        selected: Character | None = None,
+        total_characters: int | None = None,
+        can_add: bool = True,
     ):
         super().__init__(controller, guild_id, owner_id)
-        self.manage, self.page = manage, page
-        if manage:
-            if characters:
-                self.main_select = discord.ui.Select(
-                    placeholder="Change Main • choose a character...",
-                    min_values=1,
-                    max_values=1,
-                    options=character_options(characters, default_main=True),
-                    row=0,
-                )
-                self.main_select.callback = self.main
-                self.add_item(self.main_select)
-            self.characters = tuple(characters)
-            self.button(
-                "Add Character", self.add, row=1, style=discord.ButtonStyle.primary
+        self.page = page
+        self.characters = tuple(characters)
+        self.selected = selected or (characters[0] if characters else None)
+        total = total_characters if total_characters is not None else len(characters)
+        if characters:
+            options = character_options(characters)
+            for option in options:
+                option.default = option.value == str(self.selected.id)
+            self.character_select = discord.ui.Select(
+                placeholder="Choose a character to manage...",
+                min_values=1,
+                max_values=1,
+                options=options,
+                row=0,
             )
-            self.button("Edit Character", self.edit, row=1, disabled=not characters)
-            self.button("Remove Character", self.remove, row=1, disabled=not characters)
-        else:
+            self.character_select.callback = self.select_character
+            self.add_item(self.character_select)
+        if self.selected is not None:
+            # Compact labels keep the selected character's actions on one row
+            # on mobile. Destructive styling is reserved for confirmation.
+            self.button("Edit", self.edit, row=1)
             self.button(
-                "Manage Characters",
-                self.manage_characters,
-                style=discord.ButtonStyle.primary,
+                "Make Main",
+                self.main,
+                row=1,
+                disabled=(
+                    self.selected.is_main
+                    or self.selected.needs_completion
+                    or self.selected.class_id
+                    not in {entry.id for entry in controller.settings.classes}
+                ),
             )
+            self.button(
+                "Remove",
+                self.remove,
+                row=1,
+                disabled=(
+                    self.selected.is_main
+                    and total == 1
+                    and not controller.settings.allow_clear_selection
+                ),
+            )
+        self.button(
+            "Add Character",
+            self.add,
+            row=2,
+            style=discord.ButtonStyle.primary,
+            disabled=not can_add,
+        )
         if pages > 1:
-            self.button("Previous", self.previous, row=2, disabled=page == 0)
-            self.button("Next", self.next, row=2, disabled=page == pages - 1)
-        self.button("Refresh", self.refresh, row=2)
+            self.button("Previous", self.previous, row=3, disabled=page == 0)
+            self.button("Next", self.next, row=3, disabled=page == pages - 1)
+        if characters:
+            self.button("Refresh", self.refresh, row=4)
         if (
             controller.settings.enable_guild_roster
             and controller.settings.roster_visibility != "disabled"
@@ -725,52 +911,88 @@ class RosterView(OwnedView):
     async def add(self, interaction: discord.Interaction) -> None:
         async def show(guild: discord.Guild) -> None:
             await interaction.response.send_modal(
-                CharacterModal(self.controller, guild.id, self.owner_id)
+                CharacterModal(
+                    self.controller, guild.id, self.owner_id, source_view=self
+                )
             )
 
         await self.run(interaction, show, defer=False)
 
-    async def main(self, interaction: discord.Interaction) -> None:
-        async def promote(guild: discord.Guild) -> None:
+    async def select_character(self, interaction: discord.Interaction) -> None:
+        async def select(guild: discord.Guild) -> None:
             values = (interaction.data or {}).get("values", [])
             selected = values[0] if len(values) == 1 else ""
             if selected not in {str(entry.id) for entry in self.characters}:
                 raise UserError("Choose a character from this page's dropdown.")
-            notice = await self.controller.manager.promote(
-                guild, self.owner_id, int(selected)
+            roster = await self.controller.manager.roster(
+                guild, self.owner_id, reconcile=False
             )
-            await self.controller.after_change(interaction, notice)
+            character = self.controller.owned(roster, selected)
+            await self.controller.send_roster(
+                interaction, roster, page=self.page, selected_id=character.id
+            )
+
+        await self.run(interaction, select)
+
+    def selected_character(self) -> Character:
+        if self.selected is None:
+            raise UserError("Add a character first, then choose it from the dropdown.")
+        return self.selected
+
+    async def main(self, interaction: discord.Interaction) -> None:
+        async def promote(guild: discord.Guild) -> None:
+            selected = self.selected_character()
+            notice = await self.controller.manager.promote(
+                guild, self.owner_id, selected.id
+            )
+            await self.controller.after_change(
+                interaction, notice, page=self.page, selected_id=selected.id
+            )
 
         await self.run(interaction, promote)
 
     async def refresh(self, interaction: discord.Interaction) -> None:
         if await self.interaction_check(interaction):
-            await self.controller.open(interaction, manage=self.manage, page=self.page)
+            await self.controller.open(
+                interaction,
+                page=self.page,
+                selected_id=self.selected.id if self.selected else None,
+            )
 
     async def browse(self, interaction: discord.Interaction) -> None:
         if await self.interaction_check(interaction):
             await self.controller.guild_roster(interaction)
 
     async def edit(self, interaction: discord.Interaction) -> None:
-        if await self.interaction_check(interaction):
-            await self.controller.choose(interaction, "edit")
+        async def show(guild: discord.Guild) -> None:
+            await interaction.response.send_modal(
+                CharacterModal(
+                    self.controller,
+                    guild.id,
+                    self.owner_id,
+                    self.selected_character(),
+                    source_view=self,
+                )
+            )
+
+        await self.run(interaction, show, defer=False)
 
     async def remove(self, interaction: discord.Interaction) -> None:
-        if await self.interaction_check(interaction):
-            await self.controller.choose(interaction, "remove")
+        async def show(guild: discord.Guild) -> None:
+            roster = await self.controller.manager.roster(
+                guild, self.owner_id, reconcile=False
+            )
+            character = self.controller.owned(roster, self.selected_character().id)
+            await self.controller.remove_prompt(interaction, roster, character)
 
-    async def manage_characters(self, interaction: discord.Interaction) -> None:
-        if await self.interaction_check(interaction):
-            await self.controller.open(interaction)
+        await self.run(interaction, show)
 
     async def turn_page(self, interaction: discord.Interaction, page: int) -> None:
         async def show(guild: discord.Guild) -> None:
             roster = await self.controller.manager.roster(
                 guild, self.owner_id, reconcile=False
             )
-            await self.controller.send_roster(
-                interaction, roster, manage=self.manage, page=page
-            )
+            await self.controller.send_roster(interaction, roster, page=page)
 
         await self.run(interaction, show)
 
@@ -790,6 +1012,9 @@ class CharacterModal(discord.ui.Modal):
         guild_id: int,
         owner_id: int,
         character: Character | None = None,
+        *,
+        source_view: OwnedView | None = None,
+        draft: tuple[str, str, str] | None = None,
     ):
         super().__init__(
             title="Edit Character" if character else "Add Character",
@@ -801,6 +1026,7 @@ class CharacterModal(discord.ui.Modal):
             owner_id,
             character,
         )
+        self.source_view = source_view
         settings = controller.settings
 
         def default_name(value: str, maximum: int) -> str | None:
@@ -855,6 +1081,14 @@ class CharacterModal(discord.ui.Modal):
             )
         )
         self.add_item(discord.ui.Label(text="Secondary Name", component=self.secondary))
+        if draft is not None:
+            # Keep rejected form input in memory for correction, never in storage.
+            self.primary.default = (
+                draft[0] if len(draft[0]) <= self.primary.max_length else None
+            )
+            self.secondary.default = (
+                draft[1] if len(draft[1]) <= self.secondary.max_length else None
+            )
         self.class_select: discord.ui.Select | None = None
         if character is None or settings.allow_character_class_edit:
             keep_saved_class = character is not None and character.class_id not in {
@@ -864,7 +1098,11 @@ class CharacterModal(discord.ui.Modal):
                 discord.SelectOption(
                     label=entry.definition.name,
                     value=entry.id,
-                    default=character is not None and character.class_id == entry.id,
+                    default=(
+                        draft[2] == entry.id
+                        if draft is not None
+                        else character is not None and character.class_id == entry.id
+                    ),
                 )
                 for entry in settings.display_classes
             ]
@@ -907,21 +1145,59 @@ class CharacterModal(discord.ui.Modal):
         )
 
         async def save(guild: discord.Guild) -> None:
-            if self.character:
-                text = await self.controller.manager.edit(
-                    guild,
-                    self.owner_id,
-                    self.character.id,
-                    primary,
-                    secondary,
-                    class_id,
-                    expected_updated_at=self.character.updated_at,
+            if self.source_view is not None and self.source_view.is_finished():
+                raise UserError(
+                    "This menu has closed or changed. Reopen My Characters to try again."
                 )
-            else:
-                text = await self.controller.manager.add(
-                    guild, self.owner_id, primary, secondary, class_id
+            try:
+                if self.character:
+                    text = await self.controller.manager.edit(
+                        guild,
+                        self.owner_id,
+                        self.character.id,
+                        primary,
+                        secondary,
+                        class_id,
+                        expected_updated_at=self.character.updated_at,
+                    )
+                else:
+                    text = await self.controller.manager.add(
+                        guild, self.owner_id, primary, secondary, class_id
+                    )
+            except UserError as error:
+
+                async def retry(message: str) -> None:
+                    await self.controller.send(
+                        interaction,
+                        content=message
+                        + "\n\nYour entries are kept below. Choose Edit Details to try again, or Back to Characters to review your roster.",
+                        view=RetryCharacterView(
+                            self.controller,
+                            guild.id,
+                            self.owner_id,
+                            self.character,
+                            (primary, secondary, class_id),
+                        ),
+                    )
+
+                # execute still holds the session lock: a failed form cannot
+                # repaint a newer navigation result while showing its retry.
+                await self.controller.controller.handle_error(
+                    interaction,
+                    error,
+                    action="character",
+                    operation="save",
+                    respond_with=retry,
                 )
-            await self.controller.after_change(interaction, text)
+                return
+            await self.controller.after_change(
+                interaction,
+                text,
+                selected_id=self.character.id if self.character else None,
+                selected_name_key=(
+                    None if self.character else normalized_name_key(primary, secondary)
+                ),
+            )
 
         await self.controller.execute(
             interaction, save, owner_id=self.owner_id, guild_id=self.guild_id
@@ -930,7 +1206,39 @@ class CharacterModal(discord.ui.Modal):
     async def on_error(
         self, interaction: discord.Interaction, error: Exception
     ) -> None:
-        await self.controller.controller.handle_error(interaction, error)
+        await self.controller.controller.handle_error(
+            interaction, error, action="character"
+        )
+
+
+class RetryCharacterView(OwnedView):
+    def __init__(
+        self,
+        controller: CharacterController,
+        guild_id: int,
+        owner_id: int,
+        character: Character | None,
+        draft: tuple[str, str, str],
+    ):
+        super().__init__(controller, guild_id, owner_id)
+        self.character, self.draft = character, draft
+        self.button("Edit Details", self.retry, style=discord.ButtonStyle.primary)
+        self.button("Back to Characters", self.back)
+
+    async def retry(self, interaction: discord.Interaction) -> None:
+        async def show(guild: discord.Guild) -> None:
+            await interaction.response.send_modal(
+                CharacterModal(
+                    self.controller,
+                    guild.id,
+                    self.owner_id,
+                    self.character,
+                    source_view=self,
+                    draft=self.draft,
+                )
+            )
+
+        await self.run(interaction, show, defer=False)
 
 
 class EditLauncher(OwnedView):
@@ -949,7 +1257,13 @@ class EditLauncher(OwnedView):
     async def edit(self, interaction: discord.Interaction) -> None:
         async def show(guild: discord.Guild) -> None:
             await interaction.response.send_modal(
-                CharacterModal(self.controller, guild.id, self.owner_id, self.character)
+                CharacterModal(
+                    self.controller,
+                    guild.id,
+                    self.owner_id,
+                    self.character,
+                    source_view=self,
+                )
             )
 
         await self.run(interaction, show, defer=False)
@@ -974,9 +1288,7 @@ class CharacterPicker(OwnedView):
         self.action, self.removed = action, removed
         entries, self.page, pages = page_slice(self.characters, page)
         if not entries:
-            raise UserError(
-                "There are no characters to select. Reopen Manage Characters."
-            )
+            raise UserError("There are no characters to select. Reopen My Characters.")
         self.select = discord.ui.Select(
             placeholder=f"{'Choose your main' if action == 'main' else 'Choose a character'} • page {self.page + 1}/{pages}",
             min_values=1,
@@ -1003,7 +1315,13 @@ class CharacterPicker(OwnedView):
                 raise UserError("Choose a character from this menu.")
             if self.action == "edit":
                 await interaction.response.send_modal(
-                    CharacterModal(self.controller, guild.id, self.owner_id, snapshot)
+                    CharacterModal(
+                        self.controller,
+                        guild.id,
+                        self.owner_id,
+                        snapshot,
+                        source_view=self,
+                    )
                 )
                 return
             roster = await self.controller.manager.roster(
@@ -1085,7 +1403,7 @@ class RemovalConfirmation(OwnedView):
             async with self._lock:
                 if self.used:
                     raise UserError(
-                        "This confirmation has already been used. Open Manage Characters again."
+                        "This confirmation has already been used. Open My Characters again."
                     )
                 roster = await self.controller.manager.roster(
                     guild, self.owner_id, reconcile=False
@@ -1116,12 +1434,14 @@ class RemovalConfirmation(OwnedView):
             async with self._lock:
                 if self.used:
                     raise UserError(
-                        "This confirmation has already been completed. Reopen Manage Characters to view the result."
+                        "This confirmation has already been completed. Reopen My Characters to view the result."
                     )
                 self.used = True
                 self.stop()
             await self.controller.after_change(
-                interaction, "Removal cancelled. Your characters are unchanged."
+                interaction,
+                "Removal cancelled. Your characters are unchanged.",
+                selected_id=self.character.id,
             )
 
         await self.run(interaction, cancel)
@@ -1170,7 +1490,7 @@ class PurgeConfirmation(OwnedView):
             async with self._lock:
                 if self.used:
                     raise UserError(
-                        "This deletion confirmation has already been completed. Reopen Manage Characters to continue."
+                        "This deletion confirmation has already been completed. Reopen My Characters to continue."
                     )
                 self.used = True
                 self.stop()

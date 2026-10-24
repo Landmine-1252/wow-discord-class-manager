@@ -136,7 +136,7 @@ The character release upgrades the existing database to **schema version 3** aut
 2. Review the new settings in `.env.example`. Character management defaults to enabled, with unlimited characters and a member-visible guild roster. Choose `ROSTER_VISIBILITY=admins` or `disabled` if preferred before starting.
 3. Keep your existing token and role overrides. Set `CHARACTER_PANEL_TITLE` for the new title. An old explicitly configured `PANEL_DESCRIPTION` is preserved; update it or remove the override to get the new character description.
 4. Pull the chosen release and recreate the existing service, or use the normal local build override. Startup adds character, roster and recovery-journal tables without deleting guilds, role mappings or saved panel IDs.
-5. Check health/logs and `/class status`, then open the **existing** public message. Its controls update in place to Manage Characters and My Characters. Run `/class setup` only if it needs repair; no duplicate panel is needed.
+5. Check health/logs and `/class status`, then open the **existing** public message. Its controls update in place to My Characters. Run `/class setup` only if it needs repair; no duplicate panel is needed.
 6. Test John Stormwind as a main Paladin, Sam Ironforge as a Warrior alt, and switching between them. Confirm unrelated roles remain and both records survive a container restart.
 
 Original class-only installations have no character names to migrate. Existing colored roles remain intact, and users register their real characters when ready. No fabricated character or automatic whole-server member scan occurs. The same Discord user can have independent rosters in different guilds.

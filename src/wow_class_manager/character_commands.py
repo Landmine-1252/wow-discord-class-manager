@@ -26,7 +26,7 @@ def build_character_commands(controller: CharacterController) -> app_commands.Gr
         name="list", description="Privately view your main character and alts"
     )
     async def list_characters(interaction: discord.Interaction) -> None:
-        await controller.open(interaction, manage=False)
+        await controller.open(interaction)
 
     @group.command(
         name="main",

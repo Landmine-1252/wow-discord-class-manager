@@ -64,9 +64,9 @@ Discord uses a member's highest colored role for their displayed name. If office
 1. Create a normal server text channel, for example `#guild-characters`. A forum, thread, voice channel or DM is not a supported panel destination.
 2. Let intended members view the channel and use application commands. You can make it read-only for ordinary chat; members can still use native components. Ensure the bot has all five relevant permissions described above (Manage Roles at server scope and the four channel permissions in this channel).
 3. Start the container using the [deployment guide](deployment.md). Check its startup diagnostics, `commands_ready`, and `guild_ready` for your server. An unconfigured panel is expected before the first setup command; missing roles or permissions need attention.
-4. With Manage Server and Manage Roles, type `/class setup` in that channel. Alternatively use `/class setup channel:#guild-characters`. The same setup command publishes **World of Warcraft Character Manager**, with **Manage Characters**, **My Characters** and, when enabled, **Community Roster** buttons. Rerunning setup updates the saved bot message.
+4. With Manage Server and Manage Roles, type `/class setup` in that channel. Alternatively use `/class setup channel:#guild-characters`. The same setup command publishes **World of Warcraft Character Manager**, with **My Characters** and, when enabled, **Community Roster** buttons. Rerunning setup updates the saved bot message.
 5. Check the private setup summary for warnings. Run `/class status` if anything is missing.
-6. Test with an ordinary member account: click **Manage Characters → Add Character**, choose **Paladin**, and enter **John** and **Stormwind** in the separate First Name and Secondary Name fields. John Stormwind becomes main and receives the Paladin role. Add **Sam Ironforge** as **Warrior**; Sam becomes an alt and Paladin remains assigned. Select Sam in the dashboard's **Change Main** dropdown and confirm Warrior replaces Paladin while John automatically becomes an alt. The private dashboard refreshes after each change; unrelated roles must stay.
+6. Test with an ordinary member account: click **My Characters → Add Character**, choose **Paladin**, and enter **John** and **Stormwind** in the separate First Name and Secondary Name fields. John Stormwind becomes main and receives the Paladin role. Add **Sam Ironforge** as **Warrior**; Sam becomes an alt and Paladin remains assigned. Select Sam in the character dropdown, choose **Make Main**, and confirm Warrior replaces Paladin while John automatically becomes an alt. The private dashboard refreshes after each change; unrelated roles must stay.
 7. Restart the container and test the **same panel** again. No replacement panel or duplicate roles should appear.
 
 If your operator changes command names, replace `/class` and the subcommand names in these examples with the configured names.
@@ -79,11 +79,11 @@ Members can manage their own characters without an officer:
 
 | Action | Button workflow | Slash alternative |
 | --- | --- | --- |
-| Register a character | Manage Characters → Add Character → class → separate name fields | `/character add` |
+| Register a character | My Characters → Add Character → class → separate name fields | `/character add` |
 | View main and alts | My Characters | `/character list` |
-| Promote an alt | Manage Characters → select the new main in the Change Main dropdown | `/character main` |
-| Rename or change class | Manage Characters → Edit Character → choose a character | `/character edit` |
-| Remove a character | Manage Characters → Remove Character → choose → confirm | `/character remove` |
+| Promote an alt | My Characters → choose character → Make Main | `/character main` |
+| Rename or change class | My Characters → choose character → Edit | `/character edit` |
+| Remove a character | My Characters → choose character → Remove → confirm | `/character remove` |
 | View guild characters | Community Roster → class, main/alt or member filter | `/roster` |
 
 Main selection is one operation: the old main automatically becomes an alt. Selecting John Stormwind again switches back without recreating either record. Editing Sam Ironforge while Sam is an alt does not assign another class role. Editing the main's class changes its Discord role after validation. Names can be edited independently; the internal character ID and main/alt designation stay the same.
@@ -94,11 +94,13 @@ Members can share characters they plan to play, even before creating them in gam
 
 Removing a main while alts exist asks for a replacement main; the old character is removed only after that change succeeds. Removing the last character is controlled by `ALLOW_CLEAR_SELECTION`. Members with more than one page of characters can use pagination instead of deleting alts to fit a dropdown.
 
-Navigation updates the existing private message. Use Back to return to the dashboard and Cancel to leave a removal confirmation without changing characters. Successful additions, edits, main changes and removals show an updated dashboard with a private confirmation. The public panel stays the same for everyone.
+Navigation updates the existing private message. Use Back to return to the dashboard and Cancel to leave a removal confirmation without changing characters. Successful additions, edits, main changes and removals show an updated dashboard with a private confirmation. Choosing a character alone never changes your main. Rejected forms keep the entered names/class behind Edit Details for correction. The public panel stays the same for everyone.
+
+Choose Done when finished to close the private message. Inactive menus also close after five minutes, and opening another menu in the same channel removes your previous one. The bot cannot detect when you switch text channels. After a restart or failed cleanup, use Discord's Dismiss message action for an older menu.
 
 Community Roster lists only self-reported registered characters in the current server. Change the class, main/alt and member filters using dropdowns; use Previous/Next for pages and Reset Filters to show everyone again. Operators can restrict access to Manage Server holders or disable it; private personal rosters remain available. When access is restricted to admins, the public button remains visible but refuses unauthorized requests. Members cannot edit another member's characters. `/character purge` is an officer-only confirmed deletion workflow for a user's stored character data, including departed users; it leaves their Discord roles as a legacy selection.
 
-When upgrading an existing installation, members with only a class role will see guidance such as “You currently have Paladin selected. Register your main character to begin managing your characters and alts.” Their role remains unchanged until they register. No game character names are inferred from Discord names or roles. If an imported legacy character needs its second name, use Edit Character to complete both fields rather than creating a duplicate.
+When upgrading an existing installation, members with only a class role will see guidance such as “You currently have Paladin selected. Register your main character to begin managing your characters and alts.” Their role remains unchanged until they register. No game character names are inferred from Discord names or roles. If an imported legacy character needs its second name, select it and use Edit to complete both fields rather than creating a duplicate.
 
 With `ENABLE_CHARACTER_MANAGEMENT=false`, setup retains the original class dropdown. Existing character records stay stored; re-enable the feature to manage them again.
 

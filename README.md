@@ -8,15 +8,17 @@ A small, self-hosted Discord bot that helps a World of Warcraft: Forever communi
 
 ## What members see
 
-One public message titled **World of Warcraft Character Manager**, with **Manage Characters**, **My Characters** and, when enabled, **Community Roster** buttons. Character management and roster browsing open private views; the public panel stays unchanged.
+One public message titled **World of Warcraft Character Manager**, with **My Characters** and, when enabled, **Community Roster** buttons. Character management and roster browsing open private views; the public panel stays unchanged.
 
-1. Choose **Manage Characters → Add Character**, select Paladin, and enter **First Name: John** and **Secondary Name: Stormwind** in separate fields. **John Stormwind** automatically becomes your first main and receives the Paladin role.
+1. Choose **My Characters → Add Character**, select Paladin, and enter **First Name: John** and **Secondary Name: Stormwind** in separate fields. **John Stormwind** automatically becomes your first main and receives the Paladin role.
 2. Add **Sam Ironforge** as Warrior. Sam becomes an alt, John remains main, and your role stays Paladin.
-3. Select **Sam Ironforge** from the **Change Main** dropdown on your dashboard. Sam becomes main, John automatically becomes an alt, Warrior replaces Paladin, and both character records remain. Switching back works the same way. Two characters of the same class can exchange main status without removing and reassigning that role.
-4. Use **Edit Character** to change either name component or the class while preserving the record and main/alt status. Editing an alt's class does not assign an alt role; editing the main's class synchronizes the main role.
-5. **Remove Character** requires confirmation. Removing a main with alts first requires choosing a replacement; the old main is removed only after the replacement succeeds. Removing the only character requires `ALLOW_CLEAR_SELECTION=true`.
+3. Select **Sam Ironforge** from your character dropdown, then choose **Make Main**. Sam becomes main, John automatically becomes an alt, Warrior replaces Paladin, and both character records remain. Switching back works the same way. Two characters of the same class can exchange main status without removing and reassigning that role.
+4. Select a character and use **Edit** to change either name component or the class while preserving the record and main/alt status. Editing an alt's class does not assign an alt role; editing the main's class synchronizes the main role.
+5. Select a character and choose **Remove** to see a confirmation. Removing a main with alts first requires choosing a replacement; the old main is removed only after the replacement succeeds. Removing the only character requires `ALLOW_CLEAR_SELECTION=true`.
 
-Your private dashboard refreshes after changes. Paging, Back and Cancel controls keep navigation in the same private message instead of filling the channel or your private session with follow-up messages. You can enter names you plan to use and edit them later; both name fields are still required, and the bot never invents names or claims they are reserved in the game.
+Your private dashboard refreshes after changes and keeps the character you just added or edited selected. Choosing a character only changes what you are viewing; **Make Main** is a separate action. Paging, Back and Cancel keep navigation in the same private message. Rejected forms keep your entries behind **Edit Details**, so corrections do not require retyping everything.
+
+Choose **Done** to close your menu. Menus also close after five minutes without interaction; opening another menu in the same channel removes your previous one. Discord does not tell bots when you switch text channels, so closing is based on Done or inactivity. Cleanup is best effort while the bot is running; menus from before a restart may still need Discord's Dismiss message action. You can enter names you plan to use and edit them later; both name fields are still required, and the bot never invents names or claims they are reserved in the game.
 
 WoW Forever uses two name components, with full-name uniqueness within a game region. The bot uses the complete name for local roster comparisons but cannot verify game ownership, availability or naming-policy approval. Its default 2–12 characters per component are configurable application limits. [Blizzard's naming overview](https://news.blizzard.com/en-us/article/24304161/create-a-name-of-your-own-in-wow-forever)
 

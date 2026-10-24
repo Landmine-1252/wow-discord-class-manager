@@ -103,11 +103,12 @@ async def test_public_character_view_is_persistent_and_neutral(character_control
     view = CharacterView(character_controller.controller)
     assert view.is_persistent()
     assert [(item.label, item.custom_id) for item in view.children] == [
-        ("Manage Characters", MANAGE_ID),
-        ("My Characters", MY_CHARACTERS_ID),
+        ("My Characters", MANAGE_ID),
         ("Community Roster", COMMUNITY_ROSTER_ID),
     ]
     assert not any(isinstance(item, discord.ui.Select) for item in view.children)
+    registered = CharacterView(character_controller.controller, register_all=True)
+    assert MY_CHARACTERS_ID in {item.custom_id for item in registered.children}
 
 
 @pytest.mark.parametrize("action", ["main", "edit", "remove"])
@@ -446,8 +447,8 @@ async def test_reconciliation_failure_does_not_hide_editing_or_main_switch(
     result = call.followup.send.call_args.kwargs
     assert "disabled" in result["embed"].description
     assert isinstance(result["view"], RosterView)
-    assert isinstance(result["view"].main_select, discord.ui.Select)
-    assert not result["view"].main_select.disabled
+    assert isinstance(result["view"].character_select, discord.ui.Select)
+    assert not result["view"].character_select.disabled
 
 
 @pytest.mark.parametrize(
@@ -706,10 +707,9 @@ async def test_legacy_roster_page_bounds_include_every_entry_and_warning(
     await character_controller.send_roster(
         call,
         roster(*entries),
-        manage=True,
         warning="*" * 1000,
     )
     description = call.response.send_message.call_args.kwargs["embed"].description
     assert len(description) <= 4096
     assert all(f"Legacy{index:02d}" in description for index in range(1, PAGE_SIZE + 1))
-    assert "Use Edit Character" in description
+    assert "Use Edit" in description

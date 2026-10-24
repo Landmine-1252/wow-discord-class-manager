@@ -103,7 +103,7 @@ class CharacterManager:
                 else "Discord is unavailable or denied access."
             )
             raise UserError(
-                f"An interrupted character change still needs recovery. {detail} Ask an officer to check permissions and run {self.settings.command('sync')}, then open Manage Characters again. Your stored characters and main have been retained."
+                f"An interrupted character change still needs recovery. {detail} Ask an officer to check permissions and run {self.settings.command('sync')}, then open My Characters again. Your stored characters and main have been retained."
             ) from None
 
     async def _recovery_roles(
@@ -197,9 +197,11 @@ class CharacterManager:
             if state == "restored":
                 recovery = "Your previous roster and main were kept, and the prior class roles were restored."
             elif state == "committed":
-                recovery = "Reopen Manage Characters to check the recorded result before retrying."
+                recovery = (
+                    "Reopen My Characters to check the recorded result before retrying."
+                )
             else:
-                recovery = "Recovery is pending. Reopen Manage Characters to reconcile; ask an officer to check role permissions if it cannot recover."
+                recovery = "Recovery is pending. Reopen My Characters to reconcile; ask an officer to check role permissions if it cannot recover."
             detail = (
                 str(error)
                 if isinstance(error, (UserError, StorageError))
@@ -352,7 +354,11 @@ class CharacterManager:
                 },
                 plan,
             )
-            note = " Choose your main with Change Main." if before.main is None else ""
+            note = (
+                " Select a character and choose Make Main."
+                if before.main is None
+                else ""
+            )
             return f"{primary} {secondary} has been updated.{note}"
 
     async def remove(
@@ -383,7 +389,7 @@ class CharacterManager:
                 else:
                     if not self.settings.allow_clear_selection:
                         raise UserError(
-                            "Removing your last character is disabled. The operator can enable ALLOW_CLEAR_SELECTION."
+                            "Removing your last character is disabled for this server. Edit it, add a replacement, or ask an officer to allow an empty roster."
                         )
                     plan = await self._role_plan(guild, user_id, None)
             elif replacement_id is not None:

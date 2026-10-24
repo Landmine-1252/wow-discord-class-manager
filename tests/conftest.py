@@ -215,7 +215,7 @@ def interaction(guild, member, channel=None, *, admin=False):
         )
 
     value.response.defer = AsyncMock(side_effect=defer)
-    value.followup = SimpleNamespace(send=AsyncMock())
+    value.followup = SimpleNamespace(send=AsyncMock(), delete_message=AsyncMock())
     value.edit_original_response = AsyncMock()
     value.message = None
     return value

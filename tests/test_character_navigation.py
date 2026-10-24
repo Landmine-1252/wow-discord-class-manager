@@ -35,7 +35,7 @@ def component(guild, *, owner=456, message_id=700, ephemeral=True, admin=False):
 
 
 def dashboard(controller, guild, entries, *, message_id=700, pages=1):
-    view = RosterView(controller, guild.id, 456, True, 0, pages, entries)
+    view = RosterView(controller, guild.id, 456, 0, pages, entries)
     controller.track_view(message_id, view)
     return view
 
@@ -48,7 +48,7 @@ async def test_private_navigation_replaces_message_and_clears_previous_layout(
     ui.manager.roster.return_value = roster(john)
     old = dashboard(ui, guild, [john])
     edit = component(guild)
-    await old.edit(edit)
+    await ui.choose(edit, "edit")
     edit.response.defer.assert_awaited_once_with(ephemeral=True, thinking=False)
     edit.followup.send.assert_not_called()
     edit.edit_original_response.assert_awaited_once()
@@ -80,7 +80,7 @@ async def test_public_panel_opens_private_dashboard_without_editing_panel(
     await ui.store.save_panel(Panel(guild.id, channel.id, 700))
     call = component(guild, ephemeral=False)
     call.channel_id = channel.id
-    call.followup.send.return_value = SimpleNamespace(id=701)
+    call.followup.send.return_value = SimpleNamespace(id=701, delete=AsyncMock())
     panel = CharacterView(ui.controller)
     original = panel.to_components()
     await panel.manage(call)
@@ -118,11 +118,11 @@ async def test_failed_message_edit_retains_working_controls_for_retry(
     old = dashboard(ui, guild, [john])
     failed = component(guild)
     failed.edit_original_response.side_effect = http_error()
-    await old.edit(failed)
+    await ui.choose(failed, "edit")
     assert failed.followup.send.call_args.kwargs["ephemeral"]
     assert not old.is_finished()
     retry = component(guild)
-    await old.edit(retry)
+    await ui.choose(retry, "edit")
     retry.edit_original_response.assert_awaited_once()
     assert isinstance(
         retry.edit_original_response.call_args.kwargs["view"], CharacterPicker
@@ -160,16 +160,26 @@ async def test_modal_submission_uses_its_source_message_when_available(
         assert response["ephemeral"]
         assert not old.is_finished()
     assert "registered as your main Paladin" in response["content"]
-    assert response["view"].main_select.options[0].default
+    assert response["view"].character_select.options[0].default
 
 
-async def test_inline_main_selection_refreshes_designations_and_private_default(
+async def test_selection_only_browses_until_make_main_is_clicked(
     character_controller, guild
 ):
     ui = character_controller
     john = character(main=True)
     sam = character(2, primary="Sam", secondary="Ironforge", class_id="warrior")
     old = dashboard(ui, guild, [john, sam])
+    ui.manager.roster.return_value = roster(john, sam)
+    select = component(guild)
+    select.data = {"values": ["2"]}
+    await old.character_select.callback(select)
+    ui.manager.promote.assert_not_called()
+    ui.manager.roster.assert_awaited_once_with(guild, 456, reconcile=False)
+    selected_view = select.edit_original_response.call_args.kwargs["view"]
+    assert selected_view.selected.id == 2
+    assert old.is_finished()
+    ui.manager.roster.reset_mock()
     ui.manager.roster.return_value = roster(
         character(),
         character(
@@ -177,8 +187,7 @@ async def test_inline_main_selection_refreshes_designations_and_private_default(
         ),
     )
     call = component(guild)
-    call.data = {"values": ["2"]}
-    await old.main_select.callback(call)
+    await selected_view.main(call)
     ui.manager.promote.assert_awaited_once_with(guild, 456, 2)
     ui.manager.roster.assert_awaited_once_with(guild, 456, reconcile=False)
     ui.manager.add.assert_not_called()
@@ -187,13 +196,13 @@ async def test_inline_main_selection_refreshes_designations_and_private_default(
     assert "John Stormwind is now an alt" in response["content"]
     assert "Sam Ironforge**\nWarrior • Main" in response["embed"].description
     assert "John Stormwind**\nPaladin • Alt" in response["embed"].description
-    options = response["view"].main_select.options
+    options = response["view"].character_select.options
     assert [option.value for option in options if option.default] == ["2"]
     assert (
         "Current Main"
         in next(option for option in options if option.value == "2").description
     )
-    assert old.is_finished()
+    assert selected_view.is_finished()
 
 
 async def test_other_member_cannot_edit_private_message(character_controller, guild):
@@ -263,7 +272,7 @@ async def test_concurrent_navigation_cannot_overwrite_new_page_with_old_action(
     edit.response.defer.side_effect = acknowledge_second
     first_task = asyncio.create_task(old.next(next_page))
     await asyncio.wait_for(read_started.wait(), 3)
-    second_task = asyncio.create_task(old.edit(edit))
+    second_task = asyncio.create_task(old.remove(edit))
     try:
         await asyncio.wait_for(second_acknowledged.wait(), 3)
     finally:

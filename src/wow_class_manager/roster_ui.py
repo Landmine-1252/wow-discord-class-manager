@@ -114,7 +114,7 @@ async def show_guild_roster(
         colour=controller.settings.panel_accent_color,
     )
     embed.set_footer(
-        text=f"Page {selected_page + 1}/{pages} • {len(characters)} characters • Self-reported names and ownership"
+        text=f"Page {selected_page + 1}/{pages} • {len(characters)} characters • Done closes this menu • Auto-closes after 5 minutes idle"
     )
     await controller.send(
         interaction,
@@ -315,4 +315,4 @@ class GuildRosterBrowser(OwnedView):
         # open owns execution and the lock; only check this menu's owner here.
         # Own characters remain available when guild browsing is restricted.
         if await self.interaction_check(interaction):
-            await self.controller.open(interaction, manage=False)
+            await self.controller.open(interaction)

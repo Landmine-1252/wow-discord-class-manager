@@ -93,7 +93,7 @@ async def test_browser_native_filters_only_include_enabled_classes_and_selected_
         is discord.SelectDefaultValueType.user
     )
     serialized = browser.to_components()
-    assert len(serialized) == 4
+    assert len(serialized) == 5
     assert serialized[2]["components"][0]["default_values"] == [
         {"id": 789, "type": "user"}
     ]
@@ -293,7 +293,7 @@ async def test_my_characters_remains_private_and_available_if_guild_roster_is_di
     call = interaction(guild, guild.member())
     browser_controller.execute = AsyncMock()
     await browser.my_characters(call)
-    browser_controller.open.assert_awaited_once_with(call, manage=False)
+    browser_controller.open.assert_awaited_once_with(call)
     browser_controller.manager.guild_roster.assert_not_called()
     browser_controller.execute.assert_not_called()
 

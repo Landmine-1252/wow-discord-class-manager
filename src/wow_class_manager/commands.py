@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING
 
 import discord
@@ -22,7 +23,9 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
-async def respond(interaction: discord.Interaction, message: str) -> None:
+async def respond(
+    interaction: discord.Interaction, message: str, *, delete_after: float | None = None
+) -> None:
     # Discord messages are limited to 2000 characters; diagnostics may need more.
     for start in range(0, len(message), 1900):
         kwargs = {
@@ -31,8 +34,14 @@ async def respond(interaction: discord.Interaction, message: str) -> None:
             "allowed_mentions": discord.AllowedMentions.none(),
         }
         if interaction.response.is_done():
-            await interaction.followup.send(**kwargs)
+            if delete_after is None:
+                await interaction.followup.send(**kwargs)
+            else:
+                reply = await interaction.followup.send(**kwargs, wait=True)
+                await reply.delete(delay=delete_after)
         else:
+            if delete_after is not None:
+                kwargs["delete_after"] = delete_after
             await interaction.response.send_message(**kwargs)
 
 
@@ -228,6 +237,7 @@ class Controller:
         *,
         action: str = "interaction",
         operation: str = "dispatch",
+        respond_with: Callable[[str], Awaitable[None]] | None = None,
     ) -> None:
         error = getattr(error, "original", error)
         if isinstance(error, (UserError, StorageError)):
@@ -281,7 +291,14 @@ class Controller:
                 f"Class manager request failed in guild {interaction.guild_id}: {type(error).__name__}. Check bot logs and status.",
             )
         try:
-            await respond(interaction, self.bot.redact(message))
+            if respond_with is not None:
+                await respond_with(self.bot.redact(message))
+            else:
+                await respond(
+                    interaction,
+                    self.bot.redact(message),
+                    delete_after=60 if action == "character" else None,
+                )
         except discord.HTTPException as response_error:
             log.warning(
                 "interaction_response_unavailable guild_id=%s action=%s http_status=%s discord_code=%s",

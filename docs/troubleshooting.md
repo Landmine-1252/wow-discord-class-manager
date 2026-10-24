@@ -35,7 +35,7 @@ If you can post in the channel but an older image reports that you need View Cha
 
 ## First-time setup says there are no registered characters
 
-Publishing the server panel does not require the administrator to register a character. Run **`/class setup`** in the intended text channel. Then use **Manage Characters → Add Character** or **`/character add`** to create your personal roster. Change Main, Edit Character and Remove Character need an existing character; an empty roster is normal before the first registration. Their slash commands open the empty dashboard with an Add Character button instead of leaving you at a dead end. Your first character becomes main automatically.
+Publishing the server panel does not require the administrator to register a character. Run **`/class setup`** in the intended text channel. Then use **My Characters → Add Character** or **`/character add`** to create your personal roster. Make Main, Edit and Remove need an existing character; an empty roster is normal before the first registration. Their slash commands open the empty dashboard with an Add Character button instead of leaving you at a dead end. Your first character becomes main automatically.
 
 ## Bot is online but commands do not appear
 
@@ -68,7 +68,7 @@ Discord uses the member's highest colored role. Inspect all the member's roles a
 
 ## Character-management panel stops working after restart
 
-Check that the **same Discord application**, SQLite volume and component version are in use. Verify the bot is online/healthy, the guild is allowed, and Interactions Endpoint URL remains empty. “This panel is no longer active” means the database points to another message or its state was lost; use the current panel, or restore the correct backup. Run setup to publish/recover a panel when necessary and manually remove orphan bot panels. Persistent public buttons survive restarts; an already-open ephemeral editing session can expire, so reopen Manage Characters. Back, paging and successful changes normally update the current private dashboard; they do not update the public panel. If you still see the old class dropdown, check `ENABLE_CHARACTER_MANAGEMENT`, recreate the container after environment changes, and allow startup to refresh the saved panel.
+Check that the **same Discord application**, SQLite volume and component version are in use. Verify the bot is online/healthy, the guild is allowed, and Interactions Endpoint URL remains empty. “This panel is no longer active” means the database points to another message or its state was lost; use the current panel, or restore the correct backup. Run setup to publish/recover a panel when necessary and manually remove orphan bot panels. Persistent public buttons survive restarts; an already-open ephemeral editing session can expire, so reopen My Characters. Back, paging and successful changes normally update the current private dashboard; they do not update the public panel. If you still see the old class dropdown, check `ENABLE_CHARACTER_MANAGEMENT`, recreate the container after environment changes, and allow startup to refresh the saved panel.
 
 ## Community Roster is missing, restricted or empty
 
@@ -78,7 +78,7 @@ Use Reset Filters to clear the class, main/alt and member selections. Results co
 
 ## My character's Discord color is incorrect
 
-Open My Characters and confirm which character is marked Main. Only its class determines the desired role; alts never add class roles. Opening character management checks the enabled main against current Discord roles. A higher unrelated colored role can still override the visible color; see the color-priority explanation above. `/class set` intentionally does not override a registered roster—use Change Main or edit the main's class.
+Open My Characters and confirm which character is marked Main. Only its class determines the desired role; alts never add class roles. Opening character management checks the enabled main against current Discord roles. A higher unrelated colored role can still override the visible color; see the color-priority explanation above. `/class set` intentionally does not override a registered roster—select the character and choose Make Main or edit the main's class.
 
 If the main's class was disabled, its character record and designation stay intact. Select an enabled alt as main or edit the main to an enabled class when allowed. That explicit change removes obsolete safely managed class assignments, including the old disabled-class assignment. No character record or Discord role object is automatically deleted.
 
