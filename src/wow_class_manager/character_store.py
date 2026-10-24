@@ -11,7 +11,7 @@ from typing import Any
 
 from .character_names import normalized_name_key, valid_component
 from .character_roles import validate_gameplay_role
-from .classes import REGISTRY, supports_gameplay_role
+from .classes import GAMEPLAY_ROLES, REGISTRY, supports_gameplay_role
 from .roles import UserError
 from .storage import StorageError, Store
 
@@ -85,6 +85,12 @@ def configure_character_sql(db: sqlite3.Connection) -> None:
     db.create_function("character_name_valid", 1, valid_component, deterministic=True)
     db.create_function(
         "character_role_valid", 2, supports_gameplay_role, deterministic=True
+    )
+    db.create_function(
+        "gameplay_role_known",
+        1,
+        lambda role: role in GAMEPLAY_ROLES,
+        deterministic=True,
     )
 
 

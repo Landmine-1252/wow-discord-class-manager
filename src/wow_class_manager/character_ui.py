@@ -431,7 +431,7 @@ class CharacterController:
         )
         lines = (
             [
-                "Choose a character, then choose what to do. Only your main sets your class role."
+                "Choose a character, then choose what to do. Your main sets your class color and gameplay tag."
             ]
             if entries
             else []
@@ -446,7 +446,7 @@ class CharacterController:
             )
         if not entries:
             lines.append(
-                "Start with Add Character below. Enter both name parts, choose a class, then choose a gameplay role to save. Your first character becomes your main and sets your class role. You can add alts or change your plans later."
+                "Start with Add Character below. Enter both name parts, choose a class, then choose a gameplay role to save. Your first character becomes your main and sets your class color and gameplay tag. You can add alts or change your plans later."
             )
         elif roster.main is None:
             lines.append(
@@ -669,7 +669,7 @@ class CharacterController:
         if replacement:
             text += f" **{safe_text(replacement.full_name)}** will become your main before the old main is removed."
         elif character.is_main:
-            text += " This clears your main and removes its managed class role."
+            text += " This clears your main and removes its managed class role and gameplay tag."
         await self.send(
             interaction,
             content=text,
@@ -683,7 +683,7 @@ class CharacterController:
             root = self.settings.character_command_root
             await self.send(
                 interaction,
-                content=f"Open My Characters to add a character or select one to Edit, Make Main or Remove. Enter a First Name, Secondary Name and class, then choose a gameplay role to save. Only roles supported by that class are offered: DPS, Healing or Tank. Your first character becomes main; later characters become alts.\n`/{root} main` switches mains and automatically makes the previous main an alt. Only your main sets your Discord class role. Gameplay roles appear on your characters and in the community roster. Use Edit to change a role or complete an older character's role.\n`/{root} list`, `/{root} edit` and `/{root} remove` also open private workflows. Removal always asks for confirmation.\nDone closes your menu; inactive menus close after five minutes. Names and ownership are self-reported; registration does not verify game availability or ownership.",
+                content=f"Open My Characters to add a character or select one to Edit, Make Main or Remove. Enter a First Name, Secondary Name and class, then choose a gameplay role to save. Only roles supported by that class are offered: DPS, Healing or Tank. Your first character becomes main; later characters become alts.\n`/{root} main` switches mains and automatically makes the previous main an alt. Your main sets your Discord class color and a ⚔️ DPS, 💚 Healing or 🛡️ Tank role tag. Click a member's name or avatar in this server to see their tag in their profile; no boosts or Nitro needed. Gameplay roles also appear in the roster. Use Edit to change a role or complete an older character's role.\n`/{root} list`, `/{root} edit` and `/{root} remove` also open private workflows. Removal always asks for confirmation.\nDone closes your menu; inactive menus close after five minutes. Names and ownership are self-reported; registration does not verify game availability or ownership.",
                 view=BackView(self, guild.id, interaction.user.id),
             )
 

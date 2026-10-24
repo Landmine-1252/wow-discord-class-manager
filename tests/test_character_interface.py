@@ -648,7 +648,12 @@ async def test_modal_to_main_switch_to_replacement_removal_with_real_storage(
     )
     assert not sam.is_main
     mapping = await store.roles(guild.id)
-    assert {entry.id for entry in member.roles} == {unrelated.id, mapping["paladin"]}
+    tags = await store.gameplay_roles(guild.id)
+    assert {entry.id for entry in member.roles} == {
+        unrelated.id,
+        mapping["paladin"],
+        tags["tank"],
+    }
 
     change = CharacterPicker(ui, guild.id, member.id, saved.characters, "main")
     choose = interaction(guild, member)
@@ -660,7 +665,11 @@ async def test_modal_to_main_switch_to_replacement_removal_with_real_storage(
     )
     switched = await bot.characters.roster(guild, member.id, reconcile=False)
     assert switched.main.id == sam.id and len(switched.characters) == 2
-    assert {entry.id for entry in member.roles} == {unrelated.id, mapping["warrior"]}
+    assert {entry.id for entry in member.roles} == {
+        unrelated.id,
+        mapping["warrior"],
+        tags["tank"],
+    }
 
     remove = interaction(guild, member)
     await ui.choose(remove, "remove", selected=str(sam.id))
@@ -676,7 +685,11 @@ async def test_modal_to_main_switch_to_replacement_removal_with_real_storage(
     await confirmation.confirm(interaction(guild, member))
     final = await bot.characters.roster(guild, member.id, reconcile=False)
     assert len(final.characters) == 1 and final.main.id == john.id
-    assert {entry.id for entry in member.roles} == {unrelated.id, mapping["paladin"]}
+    assert {entry.id for entry in member.roles} == {
+        unrelated.id,
+        mapping["paladin"],
+        tags["tank"],
+    }
     assert await bot.characters.records.pending(guild.id, member.id) is None
 
 

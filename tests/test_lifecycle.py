@@ -435,7 +435,7 @@ async def test_failed_admin_recheck_retries_and_recovers(
     release.set()
     await asyncio.wait_for(worker, 1)
     assert bot.readiness() == "connected"
-    assert len(guild.roles) == 10
+    assert len(guild.roles) == 13
 
 
 async def test_unavailable_guild_cannot_be_marked_healthy_by_inflight_check(
@@ -498,7 +498,7 @@ async def test_removed_guild_ignores_inflight_check_and_rejoin_prepares_again(
     await bot.on_guild_join(guild)
     await asyncio.gather(*bot._workers)
     assert guild.id in bot._prepared
-    assert guild.create_role.await_count == 9
+    assert guild.create_role.await_count == 12
 
 
 async def test_disconnect_invalidates_inflight_check_and_resume_rechecks(

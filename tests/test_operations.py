@@ -55,7 +55,7 @@ async def test_schema_migrates_v1(tmp_path):
     assert await store.get_meta("test") == "migrated"
     await store.close()
     with closing(sqlite3.connect(path)) as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 4
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 5
 
 
 @pytest.mark.parametrize("problem", ["newer", "corrupt", "directory"])

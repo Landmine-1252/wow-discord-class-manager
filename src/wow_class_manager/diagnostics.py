@@ -6,7 +6,13 @@ import discord
 
 from . import __version__
 from .config import Settings
-from .roles import UserError, api_problem, require_bot_member, unsafe_reason
+from .roles import (
+    UserError,
+    api_problem,
+    configured_roles,
+    require_bot_member,
+    unsafe_reason,
+)
 from .storage import Store
 from .ui import missing_channel_permissions
 
@@ -15,6 +21,8 @@ from .ui import missing_channel_permissions
 class GuildCheck:
     associated: int = 0
     manageable: int = 0
+    gameplay_associated: int = 0
+    gameplay_manageable: int = 0
     manage_roles: bool = False
     panel_state: str = "not_configured"
     warnings: list[str] = field(default_factory=list)
@@ -36,6 +44,7 @@ async def inspect_guild(
     if not check.manage_roles:
         check.warnings.append("Grant the bot Manage Roles, then run sync.")
     mapping = await store.roles(guild.id)
+    tag_mapping = await store.gameplay_roles(guild.id)
     try:
         roles = {role.id: role for role in await guild.fetch_roles()}
     except discord.HTTPException as error:
@@ -44,17 +53,23 @@ async def inspect_guild(
         return check
     check.associated = sum(mapping.get(entry.id) in roles for entry in settings.classes)
     safe_roles = []
-    for entry in settings.classes:
-        role = roles.get(mapping.get(entry.id))
+    for entry in configured_roles(settings):
+        associations = tag_mapping if entry.gameplay else mapping
+        role = roles.get(associations.get(entry.id))
+        if entry.gameplay and role:
+            check.gameplay_associated += 1
         reason = unsafe_reason(guild, role) if role else "missing; run sync"
         if reason:
-            check.warnings.append(f"{entry.definition.name}: {reason}.")
+            check.warnings.append(f"{entry.label}: {reason}.")
         else:
-            safe_roles.append(role)
-            check.manageable += 1
+            if entry.gameplay:
+                check.gameplay_manageable += 1
+            else:
+                safe_roles.append(role)
+                check.manageable += 1
             if role.name != entry.name or role.colour.value != entry.color:
                 check.warnings.append(
-                    f"{entry.definition.name}: configuration differs; run sync."
+                    f"{entry.label}: configuration differs; run sync."
                 )
     if safe_roles:
         higher = [
@@ -133,6 +148,11 @@ async def status(settings: Settings, store: Store, guild: discord.Guild) -> str:
         *check.details,
         *check.warnings,
     ]
+    if settings.enable_character_management:
+        lines.insert(
+            3,
+            f"Gameplay tags: {check.gameplay_associated}/3 present; manageable: {check.gameplay_manageable}. Click a member's name to see their main's tag in the server profile; no boosts needed.",
+        )
     lines.append(
         "Class roles must be cosmetic: no role permissions or channel grants. Disabled classes and unrelated member roles are preserved."
     )

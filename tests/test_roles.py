@@ -5,20 +5,23 @@ import pytest
 from conftest import FakeRole, http_error
 
 from wow_class_manager.config import Settings
-from wow_class_manager.roles import RoleManager, UserError
+from wow_class_manager.roles import RoleManager, UserError, configured_roles
 
 
 async def test_empty_guild_and_repeated_startup(settings, store, locks, guild):
     manager = RoleManager(settings, store, locks)
     first = await manager.reconcile(guild)
-    assert first.created == 9 and not first.warnings
+    assert first.created == 12 and not first.warnings
     assert len(await store.roles(guild.id)) == 9
-    for role, configured in zip(guild.roles[1:], settings.classes, strict=True):
+    assert len(await store.gameplay_roles(guild.id)) == 3
+    for role, configured in zip(
+        guild.roles[1:], configured_roles(settings), strict=True
+    ):
         assert role.name == configured.name and role.colour.value == configured.color
         assert role.permissions.value == 0 and not role.hoist and not role.mentionable
     second = await RoleManager(settings, store, locks).reconcile(guild)
-    assert second.created == 0 and second.reused == 9
-    assert guild.create_role.await_count == 9
+    assert second.created == 0 and second.reused == 12
+    assert guild.create_role.await_count == 12
 
 
 @pytest.mark.parametrize("count", [4, 9])
@@ -27,7 +30,7 @@ async def test_existing_roles(settings, store, locks, guild, count):
         FakeRole(10 + i, entry.name) for i, entry in enumerate(settings.classes[:count])
     )
     result = await RoleManager(settings, store, locks).reconcile(guild)
-    assert result.reused == count and result.created == 9 - count
+    assert result.reused == count and result.created == 12 - count
     assert result.updated == count and not result.warnings
 
 
@@ -56,7 +59,7 @@ async def test_deleted_association(settings, store, locks, guild):
 async def test_duplicate_names_fail_closed(settings, store, locks, guild):
     guild.roles.extend([FakeRole(10, "Mage"), FakeRole(11, "mage")])
     result = await RoleManager(settings, store, locks).reconcile(guild)
-    assert result.created == 8 and len(result.warnings) == 1
+    assert result.created == 11 and len(result.warnings) == 1
     assert "duplicate" in result.warnings[0]
     assert "mage" not in await store.roles(guild.id)
 
@@ -81,7 +84,7 @@ async def test_unsafe_role_not_adopted(settings, store, locks, guild, unsafe):
     result = await RoleManager(settings, store, locks).reconcile(guild)
     assert len(result.warnings) == 1 and not role.edits
     assert "mage" not in await store.roles(guild.id)
-    assert result.created == 8
+    assert result.created == 11
 
 
 async def test_known_role_becomes_unsafe(settings, store, locks, guild):
@@ -110,7 +113,7 @@ async def test_api_failure_per_class(settings, store, locks, guild):
 
     guild.create_role.side_effect = fail_one
     result = await RoleManager(settings, store, locks).reconcile(guild)
-    assert result.created == 8 and len(result.warnings) == 1
+    assert result.created == 11 and len(result.warnings) == 1
 
 
 async def test_allowlist_enforced(settings, store, locks, guild):
@@ -126,7 +129,7 @@ async def test_no_auto_creation(settings, store, locks, guild):
     result = await RoleManager(
         replace(settings, auto_create_roles=False), store, locks
     ).reconcile(guild)
-    assert result.created == 0 and len(result.warnings) == 9
+    assert result.created == 0 and len(result.warnings) == 12
 
 
 async def test_disabled_class_untouched(settings, store, locks, guild):

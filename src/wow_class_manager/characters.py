@@ -60,10 +60,22 @@ class CharacterManager:
         self._enabled(character.class_id)
 
     async def _role_plan(
-        self, guild: discord.Guild, user_id: int, class_id: str | None
+        self,
+        guild: discord.Guild,
+        user_id: int,
+        class_id: str | None,
+        gameplay_role: str | None = None,
     ) -> RolePlan:
         return await self.members.plan_locked(
-            guild, user_id, class_id, allow_clear=True, include_disabled=True
+            guild,
+            user_id,
+            class_id,
+            allow_clear=True,
+            include_disabled=True,
+            sync_class=class_id is None
+            or class_id in {entry.id for entry in self.settings.classes},
+            sync_gameplay=True,
+            gameplay_role=gameplay_role,
         )
 
     async def _sync_current_locked(
@@ -71,7 +83,9 @@ class CharacterManager:
     ) -> None:
         if roster.main is not None:
             self._enabled(roster.main.class_id)
-            plan = await self._role_plan(guild, user_id, roster.main.class_id)
+            plan = await self._role_plan(
+                guild, user_id, roster.main.class_id, roster.main.gameplay_role
+            )
             await self.members.apply_locked(guild, user_id, plan)
 
     async def _recover_locked(self, guild: discord.Guild, user_id: int) -> None:
@@ -86,7 +100,9 @@ class CharacterManager:
                 }:
                     # Role IDs may have been recreated since the interruption.
                     # The unchanged durable main remains the authority.
-                    plan = await self._role_plan(guild, user_id, roster.main.class_id)
+                    plan = await self._role_plan(
+                        guild, user_id, roster.main.class_id, roster.main.gameplay_role
+                    )
                     await self.members.apply_locked(guild, user_id, plan)
                 else:
                     previous, wanted = await self._recovery_roles(guild.id, pending)
@@ -111,17 +127,24 @@ class CharacterManager:
         self, guild_id: int, operation: Operation
     ) -> tuple[set[int], set[int]]:
         mapping = await self.store.roles(guild_id)
+        tag_mapping = await self.store.gameplay_roles(guild_id)
 
-        def remap(snapshot: frozenset[int], key: str) -> set[int]:
+        def remap(snapshot: frozenset[int], prefix: str) -> set[int]:
             result = set(snapshot)
-            for class_id, old_id in operation.payload.get(key, {}).items():
-                if old_id in result and class_id in mapping:
-                    result.remove(old_id)
-                    result.add(mapping[class_id])
+            for suffix, associations in (
+                ("classes", mapping),
+                ("gameplay", tag_mapping),
+            ):
+                for key, old_id in operation.payload.get(
+                    f"_{prefix}_{suffix}", {}
+                ).items():
+                    if old_id in result and key in associations:
+                        result.remove(old_id)
+                        result.add(associations[key])
             return result
 
-        return remap(operation.previous_roles, "_previous_classes"), remap(
-            operation.wanted_roles, "_wanted_classes"
+        return remap(operation.previous_roles, "previous"), remap(
+            operation.wanted_roles, "wanted"
         )
 
     async def _compensate_locked(
@@ -173,6 +196,16 @@ class CharacterManager:
                     for cid, rid in plan.class_roles.items()
                     if rid in plan.wanted
                 },
+                "_previous_gameplay": {
+                    key: rid
+                    for key, rid in plan.gameplay_roles.items()
+                    if rid in plan.previous
+                },
+                "_wanted_gameplay": {
+                    key: rid
+                    for key, rid in plan.gameplay_roles.items()
+                    if rid in plan.wanted
+                },
             }
         prepared = False
         try:
@@ -196,7 +229,7 @@ class CharacterManager:
                 raise
             state = await self._compensate_locked(guild, user_id, operation_id)
             if state == "restored":
-                recovery = "Your previous roster and main were kept, and the prior class roles were restored."
+                recovery = "Your previous roster and main were kept, and the prior character roles were restored."
             elif state == "committed":
                 recovery = (
                     "Reopen My Characters to check the recorded result before retrying."
@@ -256,7 +289,7 @@ class CharacterManager:
             }:
                 await self._sync_current_locked(guild, user_id, before)
             plan = (
-                await self._role_plan(guild, user_id, class_id)
+                await self._role_plan(guild, user_id, class_id, gameplay_role)
                 if not before.characters
                 else None
             )
@@ -290,7 +323,9 @@ class CharacterManager:
             selected = await self.records.character(guild.id, user_id, character_id)
             self._promotable(selected)
             before = await self.records.roster(guild.id, user_id)
-            plan = await self._role_plan(guild, user_id, selected.class_id)
+            plan = await self._role_plan(
+                guild, user_id, selected.class_id, selected.gameplay_role
+            )
             if selected.is_main:
                 await self.members.apply_locked(guild, user_id, plan)
                 return f"{character_label(selected)} is already your main character."
@@ -301,7 +336,7 @@ class CharacterManager:
             demotion = (
                 f" {character_label(before.main)} is now an alt." if before.main else ""
             )
-            return f"Your main is now {character_label(selected)} ({REGISTRY[selected.class_id].name}).{demotion} Your Discord class role is synchronized."
+            return f"Your main is now {character_label(selected)} ({REGISTRY[selected.class_id].name}).{demotion} Your Discord class role and gameplay tag are synchronized."
 
     async def edit(
         self,
@@ -339,10 +374,8 @@ class CharacterManager:
             self.members.check_cooldown(guild.id, user_id)
             before = await self.records.roster(guild.id, user_id)
             plan = None
-            if selected.is_main and class_id in {
-                entry.id for entry in self.settings.classes
-            }:
-                plan = await self._role_plan(guild, user_id, class_id)
+            if selected.is_main:
+                plan = await self._role_plan(guild, user_id, class_id, gameplay_role)
             elif before.main and before.main.class_id in {
                 entry.id for entry in self.settings.classes
             }:
@@ -392,7 +425,9 @@ class CharacterManager:
                         guild.id, user_id, replacement_id
                     )
                     self._promotable(replacement)
-                    plan = await self._role_plan(guild, user_id, replacement.class_id)
+                    plan = await self._role_plan(
+                        guild, user_id, replacement.class_id, replacement.gameplay_role
+                    )
                 else:
                     if not self.settings.allow_clear_selection:
                         raise UserError(

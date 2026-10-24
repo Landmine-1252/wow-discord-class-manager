@@ -95,7 +95,7 @@ async def test_v3_upgrade_preserves_records_ids_main_and_pending_journal(v3_data
     store = Store(v3_database)
     await store.open()
     try:
-        assert await store.check_health() == 4
+        assert await store.check_health() == 5
         after = snapshot(v3_database)
         assert after.pop("characters") == [
             (*row, None) for row in before.pop("characters")
@@ -123,7 +123,7 @@ async def test_v3_upgrade_preserves_records_ids_main_and_pending_journal(v3_data
     await store.open()
     try:
         assert await CharacterStore(store).roster(123, 456) == saved
-        assert await store.check_health() == 4
+        assert await store.check_health() == 5
     finally:
         await store.close()
 

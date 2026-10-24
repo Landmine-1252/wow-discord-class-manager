@@ -4,11 +4,12 @@ import asyncio
 import contextlib
 import logging
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import aiohttp
 import discord
 
+from .character_roles import validate_gameplay_role
 from .character_store import CharacterStore
 from .config import Settings
 from .roles import Locks, UserError, api_problem, require_guild, unsafe_reason
@@ -25,6 +26,7 @@ class RolePlan:
     wanted: set[int]
     managed_ids: set[int]
     class_roles: dict[str, int]
+    gameplay_roles: dict[str, int] = field(default_factory=dict)
 
 
 class MemberManager:
@@ -104,42 +106,104 @@ class MemberManager:
         *,
         allow_clear: bool = False,
         include_disabled: bool = False,
+        sync_class: bool = True,
+        sync_gameplay: bool = False,
+        gameplay_role: str | None = None,
     ) -> RolePlan:
         """Read/validate only. Caller holds the shared per-member lock."""
         require_guild(self.settings, guild)
         enabled = {entry.id for entry in self.settings.classes}
-        if class_id is None and not allow_clear:
+        if sync_class and class_id is None and not allow_clear:
             raise UserError("Clearing your class is disabled by the bot operator.")
-        if class_id is not None and class_id not in enabled:
+        if sync_class and class_id is not None and class_id not in enabled:
             raise UserError(
                 "That class is disabled or unknown. Choose an enabled class."
             )
+        if sync_gameplay:
+            if not self.settings.enable_character_management:
+                raise UserError("Character management is disabled by the bot operator.")
+            if gameplay_role is not None:
+                validate_gameplay_role(class_id, gameplay_role)
         async with self.locks.guild(guild.id):
             mapping = await self.store.roles(guild.id)
+            tag_mapping = await self.store.gameplay_roles(guild.id)
+        if set(mapping.values()) & set(tag_mapping.values()):
+            raise UserError(
+                "Class roles and gameplay tags have conflicting associations. Ask an officer to check role setup."
+            )
         roles = {role.id: role for role in await guild.fetch_roles()}
         member = await guild.fetch_member(member_id)
         if member.bot:
             raise UserError("Class selection is available to human server members.")
         held = {role.id for role in member.roles}
         active_ids = (
-            set(mapping.values())
-            if include_disabled
-            else {mapping[cid] for cid in enabled if cid in mapping}
+            (
+                set(mapping.values())
+                if include_disabled
+                else {mapping[cid] for cid in enabled if cid in mapping}
+            )
+            if sync_class
+            else set()
         )
+        if sync_gameplay:
+            active_ids.update(tag_mapping.values())
         previous = active_ids & held
-        target = mapping.get(class_id) if class_id is not None else None
-        if class_id is not None and (target is None or target not in roles):
+        target = mapping.get(class_id) if sync_class and class_id is not None else None
+        if (
+            sync_class
+            and class_id is not None
+            and (target is None or target not in roles)
+        ):
             raise UserError(
                 f"This class role is not ready. Ask an officer to run {self.settings.command('sync')}."
             )
         wanted = {target} if target is not None else set()
+        if sync_gameplay and gameplay_role is not None:
+            tag = tag_mapping.get(gameplay_role)
+            if tag is None or tag not in roles:
+                raise UserError(
+                    f"The gameplay role tag is not ready. Ask an officer to run {self.settings.command('sync')}."
+                )
+            if roles[tag].colour.value:
+                raise UserError(
+                    "The gameplay role tag must use the default color so your class color is preserved. Ask an officer to run sync."
+                )
+            wanted.add(tag)
         for rid in previous | wanted:
             if rid not in roles:
-                raise UserError("A class role was deleted. Ask an officer to run sync.")
+                raise UserError(
+                    "A managed role was deleted. Ask an officer to run sync."
+                )
             reason = unsafe_reason(guild, roles[rid])
             if reason:
                 raise UserError(f"The class change is unavailable: {reason}.")
-        return RolePlan(member, roles, previous, wanted, active_ids, mapping)
+        return RolePlan(
+            member,
+            roles,
+            previous,
+            wanted,
+            active_ids,
+            mapping if sync_class else {},
+            tag_mapping if sync_gameplay else {},
+        )
+
+    async def _checked_role(
+        self, guild: discord.Guild, role_id: int, *, neutral: bool = False
+    ) -> discord.Role:
+        """Refresh safety after journal I/O and before each targeted Discord write."""
+        role = next(
+            (role for role in await guild.fetch_roles() if role.id == role_id), None
+        )
+        if role is None:
+            raise UserError("A managed role was deleted. Ask an officer to run sync.")
+        reason = unsafe_reason(guild, role)
+        if reason:
+            raise UserError(f"The role change is unavailable: {reason}.")
+        if neutral and role.colour.value:
+            raise UserError(
+                "The gameplay role tag must use the default color. Ask an officer to run sync."
+            )
+        return role
 
     async def apply_locked(
         self,
@@ -154,21 +218,25 @@ class MemberManager:
             return
         try:
             for rid in sorted(plan.wanted - plan.previous):
+                role = await self._checked_role(
+                    guild, rid, neutral=rid in plan.gameplay_roles.values()
+                )
                 await plan.member.add_roles(
-                    plan.roles[rid],
+                    role,
                     atomic=True,
-                    reason="Member selected a WoW main class",
+                    reason="Member selected WoW main character roles",
                 )
             for rid in sorted(plan.previous - plan.wanted):
+                role = await self._checked_role(guild, rid)
                 await plan.member.remove_roles(
-                    plan.roles[rid],
+                    role,
                     atomic=True,
-                    reason="Member changed their WoW main class",
+                    reason="Member changed WoW main character roles",
                 )
             confirmed = await guild.fetch_member(member_id)
             if {role.id for role in confirmed.roles} & plan.managed_ids != plan.wanted:
                 raise UserError(
-                    "Discord did not confirm the expected class roles; another role change may have occurred."
+                    "Discord did not confirm the expected character roles; another role change may have occurred."
                 )
         except asyncio.CancelledError:
             if recover:
@@ -211,27 +279,35 @@ class MemberManager:
     ) -> bool:
         try:
             member = await guild.fetch_member(member_id)
-            fresh_roles = {role.id: role for role in await guild.fetch_roles()}
+            tag_mapping = await self.store.gameplay_roles(guild.id)
             held = {role.id for role in member.roles}
             # Recheck safety: never restore a role that became privileged.
             for rid in previous - held:
-                role = fresh_roles.get(rid)
-                if role is None or unsafe_reason(guild, role):
-                    return False
+                role = await self._checked_role(
+                    guild, rid, neutral=rid in tag_mapping.values()
+                )
                 await member.add_roles(
-                    role, atomic=True, reason="Recover interrupted class change"
+                    role,
+                    atomic=True,
+                    reason="Recover interrupted character role change",
                 )
             for rid in (wanted - previous) & held:
-                role = fresh_roles.get(rid)
-                if role is None or unsafe_reason(guild, role):
-                    return False
+                role = await self._checked_role(guild, rid)
                 await member.remove_roles(
-                    role, atomic=True, reason="Recover interrupted class change"
+                    role,
+                    atomic=True,
+                    reason="Recover interrupted character role change",
                 )
             confirmed = await guild.fetch_member(member_id)
             return {role.id for role in confirmed.roles} & (
                 previous | wanted
             ) == previous
-        except (discord.DiscordException, aiohttp.ClientError, OSError, TimeoutError):
+        except (
+            discord.DiscordException,
+            aiohttp.ClientError,
+            UserError,
+            OSError,
+            TimeoutError,
+        ):
             log.warning("member_role_recovery_failed guild_id=%s", guild.id)
             return False

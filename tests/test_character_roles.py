@@ -128,8 +128,13 @@ async def test_role_edit_and_class_change_preserve_ids_and_unrelated_roles(
         )
     assert await manager.records.roster(guild.id, member.id) == before
     await manager.edit(guild, member.id, john.id, "John", "Stormwind", "priest", "dps")
-    member.add_roles.assert_not_called()
-    member.remove_roles.assert_not_called()
+    tags = await manager.store.gameplay_roles(guild.id)
+    assert [call.args[0].id for call in member.add_roles.call_args_list] == [
+        tags["dps"]
+    ]
+    assert [call.args[0].id for call in member.remove_roles.call_args_list] == [
+        tags["healing"]
+    ]
     await manager.edit(
         guild, member.id, john.id, "John", "Stormwind", "warrior", "tank"
     )

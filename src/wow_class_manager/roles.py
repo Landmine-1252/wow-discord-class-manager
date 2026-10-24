@@ -6,6 +6,7 @@ from weakref import WeakValueDictionary
 
 import discord
 
+from .classes import GAMEPLAY_ROLE_TAGS
 from .config import Settings
 from .storage import Store
 
@@ -123,6 +124,31 @@ class ReconcileResult:
         return text
 
 
+@dataclass(frozen=True, slots=True)
+class ConfiguredRole:
+    id: str
+    name: str
+    color: int
+    label: str
+    gameplay: bool = False
+
+
+def configured_roles(settings: Settings) -> tuple[ConfiguredRole, ...]:
+    classes = tuple(
+        ConfiguredRole(entry.id, entry.name, entry.color, entry.definition.name)
+        for entry in settings.classes
+    )
+    tags = (
+        tuple(
+            ConfiguredRole(key, name, 0, name, gameplay=True)
+            for key, name in GAMEPLAY_ROLE_TAGS.items()
+        )
+        if settings.enable_character_management
+        else ()
+    )
+    return classes + tags
+
+
 class RoleManager:
     def __init__(self, settings: Settings, store: Store, locks: Locks):
         self.settings, self.store, self.locks = settings, store, locks
@@ -139,8 +165,31 @@ class RoleManager:
             except discord.HTTPException as error:
                 result.warnings.append(api_problem(error))
                 return result
-            associations = await self.store.roles(guild.id)
-            for entry in self.settings.classes:
+            class_associations = await self.store.roles(guild.id)
+            gameplay_associations = await self.store.gameplay_roles(guild.id)
+            entries = configured_roles(self.settings)
+            for entry in entries:
+                associations, other_associations = (
+                    (gameplay_associations, class_associations)
+                    if entry.gameplay
+                    else (class_associations, gameplay_associations)
+                )
+                associate = (
+                    self.store.associate_gameplay_role
+                    if entry.gameplay
+                    else self.store.associate
+                )
+                if (
+                    sum(
+                        item.name.casefold() == entry.name.casefold()
+                        for item in entries
+                    )
+                    > 1
+                ):
+                    result.warnings.append(
+                        f"{entry.label}: class roles and gameplay tags must have distinct names. Change the class role name override, then run sync."
+                    )
+                    continue
                 role = next(
                     (r for r in roles if r.id == associations.get(entry.id)), None
                 )
@@ -150,7 +199,7 @@ class RoleManager:
                     ]
                     if len(matches) > 1:
                         result.warnings.append(
-                            f"{entry.definition.name}: duplicate role names. Rename the unwanted matching roles, then run sync; no role was chosen."
+                            f"{entry.label}: duplicate role names. Rename the unwanted matching roles, then run sync; no role was chosen."
                         )
                         continue
                     role = matches[0] if matches else None
@@ -163,28 +212,28 @@ class RoleManager:
                         ),
                         None,
                     )
-                    if other:
+                    if other or role.id in other_associations.values():
                         result.warnings.append(
-                            f"{entry.definition.name}: this role already belongs to another class, including possibly a disabled class. Choose a different role name."
+                            f"{entry.label}: this role already belongs to another class or gameplay tag, including possibly a disabled class. Choose a different role name."
                         )
                         continue
                     reason = unsafe_reason(guild, role)
                     if reason:
-                        result.warnings.append(f"{entry.definition.name}: {reason}.")
+                        result.warnings.append(f"{entry.label}: {reason}.")
                         continue
                     if any(
                         r.id != role.id and r.name.casefold() == entry.name.casefold()
                         for r in roles
                     ):
                         result.warnings.append(
-                            f"{entry.definition.name}: another role has the configured name. Rename the conflicting role before syncing."
+                            f"{entry.label}: another role has the configured name. Rename the conflicting role before syncing."
                         )
                         continue
                 try:
                     if role is None:
                         if not self.settings.auto_create_roles:
                             result.warnings.append(
-                                f"{entry.definition.name}: missing; enable AUTO_CREATE_ROLES or create a safe matching role."
+                                f"{entry.label}: missing; enable AUTO_CREATE_ROLES or create a safe matching role."
                             )
                             continue
                         role = await guild.create_role(
@@ -193,27 +242,25 @@ class RoleManager:
                             permissions=discord.Permissions.none(),
                             hoist=False,
                             mentionable=False,
-                            reason="WoW class role setup",
+                            reason="WoW character role setup",
                         )
                         roles.append(role)
                         # Persist immediately: subsequent retries reuse this ID.
-                        await self.store.associate(guild.id, entry.id, role.id)
+                        await associate(guild.id, entry.id, role.id)
                         associations[entry.id] = role.id
                         result.created += 1
                     else:
-                        await self.store.associate(guild.id, entry.id, role.id)
+                        await associate(guild.id, entry.id, role.id)
                         associations[entry.id] = role.id
                         result.reused += 1
                         if role.name != entry.name or role.colour.value != entry.color:
                             edited = await role.edit(
                                 name=entry.name,
                                 colour=discord.Colour(entry.color),
-                                reason="WoW class role configuration update",
+                                reason="WoW character role configuration update",
                             )
                             roles[roles.index(role)] = edited
                             result.updated += 1
                 except discord.HTTPException as error:
-                    result.warnings.append(
-                        f"{entry.definition.name}: {api_problem(error)}"
-                    )
+                    result.warnings.append(f"{entry.label}: {api_problem(error)}")
         return result

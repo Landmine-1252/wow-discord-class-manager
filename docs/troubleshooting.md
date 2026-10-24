@@ -86,6 +86,14 @@ If the main's class was disabled, its character record and designation stay inta
 
 Reopen My Characters to fetch current data rather than relying on an old ephemeral reply. A successful promotion updates one main pointer and automatically makes the old main an alt. If a switch failed, retaining the old main is intentional: the bot reports success only after role confirmation and database commit. Retry from a fresh view after fixing the reported permission/connectivity problem. Pending operations are recovered against the prior committed roster; never manually alter main pointers or recovery rows.
 
+## A gameplay tag is missing or incorrect
+
+Gameplay tags are ordinary Discord roles named **⚔️ DPS**, **💚 Healing** and **🛡️ Tank**. They appear in the member's server profile after clicking their name/avatar; they do not add custom text on hover or a boosted icon beside chat messages. No Nitro or server boosts are required.
+
+Run `/class sync` to create or safely reuse the tags, and keep the bot's highest role above them. With `AUTO_CREATE_ROLES=false`, create those exact names with no permissions and default/no color, then sync. `/class status` reports tag readiness. If a tag was recolored, sync restores its default color so it cannot override the class color.
+
+The member should open My Characters after upgrading to synchronize their main. A main with **Role not set** needs Edit and an explicit gameplay-role choice first. Alts never add tags. Disabling character management preserves existing tags without changing them. Administrator data purge also leaves Discord roles in place; an officer can remove a retained tag manually if needed.
+
 ## A member has multiple managed class roles
 
 Open character management to reconcile an enabled main. The bot keeps that main's role and removes other safely associated class assignments through targeted operations, preserving unrelated roles. If a class role has acquired permissions, moved above the bot, or become integration-managed, the bot will refuse to touch it and explain the issue. Restore safe cosmetic role configuration or have an officer resolve it deliberately. Do not delete character records to repair roles.

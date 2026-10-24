@@ -33,7 +33,7 @@ Open **Installation** in the sidebar:
 
    | Permission | Why it is needed |
    | --- | --- |
-   | Manage Roles | Create, color, rename and assign safe class roles below the bot |
+   | Manage Roles | Create, color, rename and assign safe class roles and gameplay tags below the bot |
    | View Channels | Access the selection channel |
    | Send Messages | Publish the panel |
    | Embed Links | Display the clean selection embed |
@@ -49,11 +49,11 @@ The portal's [official installation guide](https://github.com/discord/discord-ap
 
 ## 3. Invite and arrange roles
 
-Open the installation link, choose **Add to Server**, select your server and authorize. Your account needs permission to manage that server. You can invite before or after starting the container. When the bot first connects or joins, it reconciles the enabled class roles automatically.
+Open the installation link, choose **Add to Server**, select your server and authorize. Your account needs permission to manage that server. You can invite before or after starting the container. When the bot first connects or joins, it reconciles the enabled class roles and, when character management is enabled, the three gameplay tags automatically.
 
 Verify the bot appears under **Server Settings → Members**. Installing the app only on your own account, or authorizing commands without the `bot` scope, does not add the bot member needed to manage roles. `commands_ready` confirms command registration, while `gateway_ready guild_count=0` means there were no connected servers at that startup snapshot. If you invited after that line, look for a later `guild_ready` or restart once to check the fresh count. See [connection troubleshooting](troubleshooting.md#connected-to-discord-but-guild_count0).
 
-In Discord, open **Server Settings → Roles**. Drag the bot's highest role above all class roles. Manage Roles only allows the bot to manage roles below its highest role; granting the permission alone cannot bypass the hierarchy. The bot never reorders anything itself.
+In Discord, open **Server Settings → Roles**. Drag the bot's highest role above all class roles and gameplay tags. Manage Roles only allows the bot to manage roles below its highest role; granting the permission alone cannot bypass the hierarchy. The bot never reorders anything itself.
 
 Existing roles are reused by case-insensitive name only when there is one match, no assigned permissions, no channel override granting permissions, and the role is below the bot. Integration-managed roles are rejected. For conflicts, rename unwanted roles or choose distinct configured names, then run `/class sync`. Never remove security permissions from a real officer role just to make it adoptable; use a separate cosmetic class role.
 

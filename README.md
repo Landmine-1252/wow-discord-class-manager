@@ -2,7 +2,7 @@
 
 # WoW Discord Class Manager
 
-A small, self-hosted Discord bot that helps a World of Warcraft: Forever community share the characters its members plan to play. Members register a two-part character name, class and gameplay role, keep any number of alts, and choose one main. Plans can change: the bot safely updates each member's Discord class role when they choose a different main.
+A small, self-hosted Discord bot that helps a World of Warcraft: Forever community share the characters its members plan to play. Members register a two-part character name, class and gameplay role, keep any number of alts, and choose one main. Plans can change: the bot safely updates each member's Discord class role and gameplay tag when they choose a different main.
 
 **Create a Discord application → Configure the token → Start the container → Invite the bot → Run `/class setup` → Done.** Inviting the bot before starting the container works too.
 
@@ -18,7 +18,7 @@ One public message titled **World of Warcraft Character Manager**, with **My Cha
 
 Your private dashboard refreshes after changes and keeps the character you just added or edited selected. Choosing a character only changes what you are viewing; **Make Main** is a separate action. Paging, Back and Cancel keep navigation in the same private message. Rejected forms keep your entries behind **Edit Details**, so corrections do not require retyping everything.
 
-Each character has one gameplay role, shown in personal and community rosters. The role dropdown offers only roles supported by the selected class; choosing one saves the character. Closing or going back before choosing a role discards the draft. Existing characters show **Role not set** after upgrading; use **Edit** to choose one. Gameplay roles are roster details; the main's class still controls the Discord class color.
+Each character has one gameplay role, shown in personal and community rosters. The role dropdown offers only roles supported by the selected class; choosing one saves the character. Closing or going back before choosing a role discards the draft. Existing characters show **Role not set** after upgrading; use **Edit** to choose one. The main's gameplay role also appears as an ordinary **⚔️ DPS**, **💚 Healing** or **🛡️ Tank** Discord role. Click a member's name/avatar in the server to see it in their profile. These tags work on free Discord without Nitro or boosts; the emoji is part of the role name. Tags use the default/no color so the class color is preserved. Changing a main or its gameplay role updates the tag; alts do not assign tags. This uses Discord's profile role list, not a custom hover tooltip or boosted role icon.
 
 | Classes | Available gameplay roles |
 | --- | --- |
@@ -41,7 +41,7 @@ Discord displays the color of a member's highest colored role. An officer role a
 
 - The nine original Classic classes enabled by default; four modern classes available by configuration.
 - Two-part Unicode character names, one main per guild member, automatic main/alt switching and private dashboards.
-- Per-character DPS, Healing or Tank selection with class restrictions.
+- Per-character DPS, Healing or Tank selection with class restrictions and a free Discord profile tag for the main.
 - A community roster with native filters and pagination to discover members' current character plans.
 - Automatic role discovery and creation on startup and server join, with safe, repeatable synchronization.
 - Persistent panels, character records and SQLite role associations that survive container restarts.
@@ -82,11 +82,11 @@ You need a Discord account allowed to install apps in your server, a Discord app
    ```
 
 4. In the Developer Portal, open **Installation**, enable **Guild Install**, and select **Discord Provided Link**. Under Guild Install defaults choose scopes **bot** and **applications.commands**. Give the bot **Manage Roles**, **View Channels**, **Send Messages**, **Embed Links**, and **Read Message History**. Copy the installation link and invite it. Do not grant Administrator.
-5. In your server's role settings, put the bot's role above existing class roles. In a text channel, run **`/class setup`** as someone with **Manage Server and Manage Roles**. The bot creates or safely reuses the class roles and publishes one panel.
+5. In your server's role settings, put the bot's role above existing class roles and gameplay tags. In a text channel, run **`/class setup`** as someone with **Manage Server and Manage Roles**. The bot creates or safely reuses the class roles and three gameplay tags, then publishes one panel.
 
 Members use the public buttons or `/character add`, `/character list`, `/character main`, `/character edit`, `/character remove` and `/character help`. Officers retain `/class setup`, `/class sync` and `/class status`. Run setup again to update the existing bot-owned panel; explicitly choose a different `channel` option to move it. An officer with Manage Server and Manage Roles can use `/character purge` to remove a member's stored roster after confirmation.
 
-Existing class-only users keep their roles and can register at their convenience. No character names are invented during upgrade. Once a member has a registered roster, it controls their class: `/class set` and `/class clear` guide them to character management. Set `ENABLE_CHARACTER_MANAGEMENT=false` to restore the original class-selection panel and behavior while retaining stored characters for later use.
+Existing class-only users keep their roles and can register at their convenience. No character names are invented during upgrade. Once a member has a registered roster, it controls their class: `/class set` and `/class clear` guide them to character management. Set `ENABLE_CHARACTER_MANAGEMENT=false` to restore the original class-selection panel and behavior while retaining stored characters for later use. Existing gameplay tags are left in place while this feature is disabled.
 
 ## Configuration and operations
 

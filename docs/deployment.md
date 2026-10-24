@@ -130,9 +130,9 @@ For local builds, fetch the selected source revision and use the build override.
 
 ## Upgrading an existing class-only installation
 
-The current character release upgrades the existing database to **schema version 4** automatically. Keep the same application/token, `DATABASE_PATH`, Compose project name and `/data` volume. No manual SQL, new container service or new network port is needed.
+The current character release upgrades the existing database to **schema version 5** automatically. Keep the same application/token, `DATABASE_PATH`, Compose project name and `/data` volume. No manual SQL, new container service or new network port is needed.
 
-Upgrades from version 3 add a nullable gameplay role while preserving character IDs, names, classes, main pointers and pending recovery journals. Existing characters display **Role not set** until their owner uses Edit and chooses a supported role. New registrations and edits require DPS, Healing or Tank as supported by the class. Personal and community rosters display the selection; Discord class-role mappings remain intact.
+Upgrades from version 3 add a nullable gameplay role while preserving character IDs, names, classes, main pointers and pending recovery journals. Existing characters display **Role not set** until their owner uses Edit and chooses a supported role. New registrations and edits require DPS, Healing or Tank as supported by the class. Personal and community rosters display the selection; Discord class-role mappings remain intact. Version 5 adds separate Discord gameplay-tag associations without modifying existing characters, main pointers or pending recovery. Startup or `/class sync` prepares ⚔️ DPS, 💚 Healing and 🛡️ Tank as ordinary colorless roles. Members receive the committed main's tag on their next character interaction; there is no whole-server member scan, Nitro or boost requirement.
 
 1. Stop the bot and take the consistent backup described below. Retain the old image version/digest alongside that backup.
 2. Review the new settings in `.env.example`. Character management defaults to enabled, with unlimited characters and a member-visible guild roster. Choose `ROSTER_VISIBILITY=admins` or `disabled` if preferred before starting.
@@ -147,7 +147,7 @@ For a recognized older custom character table with `id`, `guild_id`, `user_id`, 
 
 After an interrupted main switch, the next private character interaction reconciles the durable pending operation and the prior committed main. If permissions or connectivity still prevent recovery, the bot explains the problem and retains the roster and journal for retry. Do not clear recovery rows manually. Members who leave and rejoin retain their stored characters; their roles are reconciled when they use character management again.
 
-To temporarily return to class-only behavior without rolling back the database, set `ENABLE_CHARACTER_MANAGEMENT=false` and recreate the container. Records remain intact, while legacy class selection becomes available. Re-enabling restores the stored main as the authoritative class when the member interacts. To run an older application image that only understands schema 2 or 3, restore the **matching pre-upgrade backup** as well; disabling a feature does not downgrade its schema.
+To temporarily return to class-only behavior without rolling back the database, set `ENABLE_CHARACTER_MANAGEMENT=false` and recreate the container. Records remain intact, while legacy class selection becomes available. Re-enabling restores the stored main as the authoritative class when the member interacts. To run an older application image that only understands schema 2, 3 or 4, restore the **matching pre-upgrade backup** as well; disabling a feature does not downgrade its schema.
 
 ## Backup and restore
 

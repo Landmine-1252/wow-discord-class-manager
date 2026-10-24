@@ -20,6 +20,17 @@ class Panel:
     message_id: int
 
 
+def migrate_gameplay_role_tags(db: sqlite3.Connection) -> None:
+    """Add independent Discord associations without changing characters or journals."""
+    db.execute(
+        "CREATE TABLE gameplay_roles ("
+        "guild_id INTEGER NOT NULL REFERENCES guilds(guild_id), "
+        "gameplay_role TEXT NOT NULL CHECK(gameplay_role_known(gameplay_role)), "
+        "role_id INTEGER NOT NULL, PRIMARY KEY(guild_id, gameplay_role), "
+        "UNIQUE(guild_id, role_id))"
+    )
+
+
 class Store:
     def __init__(self, path: Path):
         self.path = path
@@ -76,7 +87,7 @@ class Store:
 
                 configure_character_sql(self.db)
                 version = self.db.execute("PRAGMA user_version").fetchone()[0]
-                if version > 4:
+                if version > 5:
                     raise StorageError(
                         "The database schema is newer than this application. Upgrade the image or restore a compatible backup."
                     )
@@ -106,6 +117,9 @@ class Store:
                         self.db.execute("PRAGMA user_version=3")
                     if version < 4:
                         migrate_character_roles(self.db)
+                        self.db.execute("PRAGMA user_version=4")
+                    if version < 5:
+                        migrate_gameplay_role_tags(self.db)
                         if self.db.execute("PRAGMA foreign_key_check").fetchone():
                             raise StorageError(
                                 "SQLite migration found inconsistent relationships. The upgrade was rolled back; restore a verified backup or have the existing database repaired before retrying."
@@ -116,7 +130,7 @@ class Store:
                             raise StorageError(
                                 "SQLite migration found database integrity problems. The upgrade was rolled back; restore a verified backup before retrying."
                             )
-                        self.db.execute("PRAGMA user_version=4")
+                        self.db.execute("PRAGMA user_version=5")
             except BaseException:
                 if self._connection is not None:
                     self._connection.close()
@@ -181,10 +195,49 @@ class Store:
     async def associate(self, guild_id: int, class_id: str, role_id: int) -> None:
         def save() -> None:
             with self.db:
+                self.db.execute("BEGIN IMMEDIATE")
+                if self.db.execute(
+                    "SELECT 1 FROM gameplay_roles WHERE guild_id=? AND role_id=?",
+                    (guild_id, role_id),
+                ).fetchone():
+                    raise StorageError(
+                        "Class roles and gameplay tags must use separate Discord roles."
+                    )
                 self.db.execute("INSERT OR IGNORE INTO guilds VALUES (?)", (guild_id,))
                 self.db.execute(
                     "INSERT INTO roles VALUES (?, ?, ?) ON CONFLICT(guild_id, class_id) DO UPDATE SET role_id=excluded.role_id",
                     (guild_id, class_id, role_id),
+                )
+
+        await self._run(save)
+
+    async def gameplay_roles(self, guild_id: int) -> dict[str, int]:
+        return await self._run(
+            lambda: dict(
+                self.db.execute(
+                    "SELECT gameplay_role, role_id FROM gameplay_roles WHERE guild_id=?",
+                    (guild_id,),
+                ).fetchall()
+            )
+        )
+
+    async def associate_gameplay_role(
+        self, guild_id: int, gameplay_role: str, role_id: int
+    ) -> None:
+        def save() -> None:
+            with self.db:
+                self.db.execute("BEGIN IMMEDIATE")
+                if self.db.execute(
+                    "SELECT 1 FROM roles WHERE guild_id=? AND role_id=?",
+                    (guild_id, role_id),
+                ).fetchone():
+                    raise StorageError(
+                        "Class roles and gameplay tags must use separate Discord roles."
+                    )
+                self.db.execute("INSERT OR IGNORE INTO guilds VALUES (?)", (guild_id,))
+                self.db.execute(
+                    "INSERT INTO gameplay_roles VALUES (?, ?, ?) ON CONFLICT(guild_id, gameplay_role) DO UPDATE SET role_id=excluded.role_id",
+                    (guild_id, gameplay_role, role_id),
                 )
 
         await self._run(save)

@@ -206,7 +206,7 @@ async def test_admin_setup_status_sync_and_help(controller, guild):
     member = guild.member()
     setup = interaction(guild, member, channel, admin=True)
     await controller.execute(setup, "setup")
-    assert "9 created" in setup.followup.send.call_args.kwargs["content"]
+    assert "12 created" in setup.followup.send.call_args.kwargs["content"]
     status = interaction(guild, member, channel, admin=True)
     await controller.execute(status, "status")
     text = status.followup.send.call_args.kwargs["content"]
@@ -214,7 +214,7 @@ async def test_admin_setup_status_sync_and_help(controller, guild):
     assert "exists and owned by this bot" in text
     sync = interaction(guild, member, channel, admin=True)
     await controller.execute(sync, "sync")
-    assert "0 created, 9 reused" in sync.followup.send.call_args.kwargs["content"]
+    assert "0 created, 12 reused" in sync.followup.send.call_args.kwargs["content"]
     help_call = interaction(guild, member, channel)
     await controller.execute(help_call, "help")
     assert "/class set" in help_call.followup.send.call_args.kwargs["content"]

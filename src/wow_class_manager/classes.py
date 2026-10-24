@@ -3,6 +3,8 @@
 from dataclasses import dataclass
 
 GAMEPLAY_ROLES = {"dps": "DPS", "healing": "Healing", "tank": "Tank"}
+# Unicode in ordinary role names works without Nitro or Server Boosts.
+GAMEPLAY_ROLE_TAGS = {"dps": "⚔️ DPS", "healing": "💚 Healing", "tank": "🛡️ Tank"}
 
 
 @dataclass(frozen=True, slots=True)

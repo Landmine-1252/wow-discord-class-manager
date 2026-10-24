@@ -142,11 +142,19 @@ async def test_edit_disabled_main_preserves_record_and_only_changes_class_if_sel
         assert result.main.class_id == (selection or "paladin")
         assert result.main.gameplay_role == ("dps" if selection else "tank")
         mapping = await store.roles(guild.id)
-        assert {role.id for role in member.roles} == {mapping[selection or "paladin"]}
+        tags = await store.gameplay_roles(guild.id)
+        assert {role.id for role in member.roles} == {
+            mapping[selection or "paladin"],
+            tags[result.main.gameplay_role],
+        }
         assert "has been updated" in selected.followup.send.call_args.kwargs["content"]
         if selection is None:
-            member.add_roles.assert_not_awaited()
-            member.remove_roles.assert_not_awaited()
+            assert [call.args[0].id for call in member.add_roles.call_args_list] == [
+                tags["tank"]
+            ]
+            assert [call.args[0].id for call in member.remove_roles.call_args_list] == [
+                tags["healing"]
+            ]
     finally:
         await current.close()
         await original.close()
