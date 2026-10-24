@@ -26,7 +26,8 @@ def migrate_gameplay_role_tags(db: sqlite3.Connection) -> None:
         "CREATE TABLE gameplay_roles ("
         "guild_id INTEGER NOT NULL REFERENCES guilds(guild_id), "
         "gameplay_role TEXT NOT NULL CHECK(gameplay_role_known(gameplay_role)), "
-        "role_id INTEGER NOT NULL, PRIMARY KEY(guild_id, gameplay_role), "
+        "role_id INTEGER NOT NULL, "
+        "PRIMARY KEY(guild_id, gameplay_role), "
         "UNIQUE(guild_id, role_id))"
     )
 
@@ -51,7 +52,9 @@ class Store:
                     raise
             except (sqlite3.Error, OSError):
                 raise StorageError(
-                    "SQLite is unavailable. Check DATABASE_PATH, free space and /data ownership; restore a backup if corrupt. Never delete a database to fix permissions."
+                    "SQLite is unavailable. Check DATABASE_PATH, free space and /data"
+                    " ownership; restore a backup if corrupt. Never delete a database"
+                    " to fix permissions."
                 ) from None
 
     @property
@@ -69,7 +72,8 @@ class Store:
             except OSError:
                 handle.close()
                 raise StorageError(
-                    "Another process is using this database. Run exactly one bot container."
+                    "Another process is using this database. Run exactly one bot"
+                    " container."
                 ) from None
             self._file_lock = handle
             try:
@@ -89,7 +93,8 @@ class Store:
                 version = self.db.execute("PRAGMA user_version").fetchone()[0]
                 if version > 5:
                     raise StorageError(
-                        "The database schema is newer than this application. Upgrade the image or restore a compatible backup."
+                        "The database schema is newer than this application. Upgrade"
+                        " the image or restore a compatible backup."
                     )
                 with self.db:
                     self.db.execute("BEGIN IMMEDIATE")
@@ -98,18 +103,30 @@ class Store:
                             "CREATE TABLE guilds (guild_id INTEGER PRIMARY KEY)"
                         )
                         self.db.execute(
-                            "CREATE TABLE roles (guild_id INTEGER NOT NULL REFERENCES guilds(guild_id), class_id TEXT NOT NULL, role_id INTEGER NOT NULL, PRIMARY KEY(guild_id, class_id), UNIQUE(guild_id, role_id))"
+                            "CREATE TABLE roles ("
+                            "guild_id INTEGER NOT NULL REFERENCES guilds(guild_id), "
+                            "class_id TEXT NOT NULL, "
+                            "role_id INTEGER NOT NULL, "
+                            "PRIMARY KEY(guild_id, class_id), "
+                            "UNIQUE(guild_id, role_id))"
                         )
                         self.db.execute(
-                            "CREATE TABLE panels (guild_id INTEGER PRIMARY KEY REFERENCES guilds(guild_id), channel_id INTEGER NOT NULL, message_id INTEGER NOT NULL)"
+                            "CREATE TABLE panels ("
+                            "guild_id INTEGER PRIMARY KEY REFERENCES guilds(guild_id), "
+                            "channel_id INTEGER NOT NULL, "
+                            "message_id INTEGER NOT NULL)"
                         )
                         self.db.execute("PRAGMA user_version=1")
                     if version < 2:
                         self.db.execute(
-                            "CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)"
+                            "CREATE TABLE metadata ("
+                            "key TEXT PRIMARY KEY, value TEXT NOT NULL)"
                         )
                         self.db.execute(
-                            "CREATE TABLE retired_panels (guild_id INTEGER NOT NULL, channel_id INTEGER NOT NULL, message_id INTEGER PRIMARY KEY)"
+                            "CREATE TABLE retired_panels ("
+                            "guild_id INTEGER NOT NULL, "
+                            "channel_id INTEGER NOT NULL, "
+                            "message_id INTEGER PRIMARY KEY)"
                         )
                         self.db.execute("PRAGMA user_version=2")
                     if version < 3:
@@ -122,13 +139,17 @@ class Store:
                         migrate_gameplay_role_tags(self.db)
                         if self.db.execute("PRAGMA foreign_key_check").fetchone():
                             raise StorageError(
-                                "SQLite migration found inconsistent relationships. The upgrade was rolled back; restore a verified backup or have the existing database repaired before retrying."
+                                "SQLite migration found inconsistent relationships. The"
+                                " upgrade was rolled back; restore a verified backup or"
+                                " have the existing database repaired before retrying."
                             )
                         if self.db.execute("PRAGMA quick_check").fetchall() != [
                             ("ok",)
                         ]:
                             raise StorageError(
-                                "SQLite migration found database integrity problems. The upgrade was rolled back; restore a verified backup before retrying."
+                                "SQLite migration found database integrity problems."
+                                " The upgrade was rolled back; restore a verified"
+                                " backup before retrying."
                             )
                         self.db.execute("PRAGMA user_version=5")
             except BaseException:
@@ -162,11 +183,13 @@ class Store:
             # SQLite's detailed integrity report: it may contain roster data.
             if self.db.execute("PRAGMA quick_check").fetchall() != [("ok",)]:
                 raise StorageError(
-                    "SQLite startup integrity check failed. Stop the bot and restore a verified backup; do not delete the database."
+                    "SQLite startup integrity check failed. Stop the bot and restore a"
+                    " verified backup; do not delete the database."
                 )
             if self.db.execute("PRAGMA foreign_key_check").fetchone() is not None:
                 raise StorageError(
-                    "SQLite startup relationship check failed. Stop the bot and restore a verified backup or have the database repaired."
+                    "SQLite startup relationship check failed. Stop the bot and restore"
+                    " a verified backup or have the database repaired."
                 )
             version = self.db.execute("PRAGMA user_version").fetchone()[0]
             # A read alone would miss query-only databases and lost write access.
@@ -174,7 +197,8 @@ class Store:
             self.db.execute("BEGIN IMMEDIATE")
             try:
                 self.db.execute(
-                    "INSERT INTO metadata VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                    "INSERT INTO metadata VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET"
+                    " value=excluded.value",
                     ("startup:write-probe", "check"),
                 )
             finally:
@@ -205,7 +229,8 @@ class Store:
                     )
                 self.db.execute("INSERT OR IGNORE INTO guilds VALUES (?)", (guild_id,))
                 self.db.execute(
-                    "INSERT INTO roles VALUES (?, ?, ?) ON CONFLICT(guild_id, class_id) DO UPDATE SET role_id=excluded.role_id",
+                    "INSERT INTO roles VALUES (?, ?, ?) ON CONFLICT(guild_id, class_id)"
+                    " DO UPDATE SET role_id=excluded.role_id",
                     (guild_id, class_id, role_id),
                 )
 
@@ -215,7 +240,8 @@ class Store:
         return await self._run(
             lambda: dict(
                 self.db.execute(
-                    "SELECT gameplay_role, role_id FROM gameplay_roles WHERE guild_id=?",
+                    "SELECT gameplay_role, role_id FROM gameplay_roles WHERE"
+                    " guild_id=?",
                     (guild_id,),
                 ).fetchall()
             )
@@ -236,7 +262,8 @@ class Store:
                     )
                 self.db.execute("INSERT OR IGNORE INTO guilds VALUES (?)", (guild_id,))
                 self.db.execute(
-                    "INSERT INTO gameplay_roles VALUES (?, ?, ?) ON CONFLICT(guild_id, gameplay_role) DO UPDATE SET role_id=excluded.role_id",
+                    "INSERT INTO gameplay_roles VALUES (?, ?, ?) ON CONFLICT(guild_id,"
+                    " gameplay_role) DO UPDATE SET role_id=excluded.role_id",
                     (guild_id, gameplay_role, role_id),
                 )
 
@@ -259,11 +286,14 @@ class Store:
                     "INSERT OR IGNORE INTO guilds VALUES (?)", (panel.guild_id,)
                 )
                 self.db.execute(
-                    "INSERT OR IGNORE INTO retired_panels SELECT guild_id, channel_id, message_id FROM panels WHERE guild_id=? AND message_id != ?",
+                    "INSERT OR IGNORE INTO retired_panels SELECT guild_id, channel_id,"
+                    " message_id FROM panels WHERE guild_id=? AND message_id != ?",
                     (panel.guild_id, panel.message_id),
                 )
                 self.db.execute(
-                    "INSERT INTO panels VALUES (?, ?, ?) ON CONFLICT(guild_id) DO UPDATE SET channel_id=excluded.channel_id, message_id=excluded.message_id",
+                    "INSERT INTO panels VALUES (?, ?, ?) ON CONFLICT(guild_id) DO"
+                    " UPDATE SET channel_id=excluded.channel_id,"
+                    " message_id=excluded.message_id",
                     (panel.guild_id, panel.channel_id, panel.message_id),
                 )
 
@@ -274,7 +304,8 @@ class Store:
             lambda: [
                 Panel(*row)
                 for row in self.db.execute(
-                    "SELECT guild_id, channel_id, message_id FROM retired_panels WHERE guild_id=?",
+                    "SELECT guild_id, channel_id, message_id FROM retired_panels WHERE"
+                    " guild_id=?",
                     (guild_id,),
                 ).fetchall()
             ]
@@ -302,7 +333,8 @@ class Store:
         def save() -> None:
             with self.db:
                 self.db.execute(
-                    "INSERT INTO metadata VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                    "INSERT INTO metadata VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET"
+                    " value=excluded.value",
                     (key, value),
                 )
 

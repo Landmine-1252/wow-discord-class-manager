@@ -26,10 +26,13 @@ def v3_database(tmp_path):
         configure_character_sql(db)
         db.executescript(
             "CREATE TABLE guilds(guild_id INTEGER PRIMARY KEY);"
-            "CREATE TABLE roles(guild_id INTEGER, class_id TEXT, role_id INTEGER, PRIMARY KEY(guild_id,class_id));"
-            "CREATE TABLE panels(guild_id INTEGER PRIMARY KEY,channel_id INTEGER,message_id INTEGER);"
+            "CREATE TABLE roles(guild_id INTEGER, class_id TEXT, role_id INTEGER,"
+            " PRIMARY KEY(guild_id,class_id));"
+            "CREATE TABLE panels(guild_id INTEGER PRIMARY KEY,channel_id INTEGER,"
+            "message_id INTEGER);"
             "CREATE TABLE metadata(key TEXT PRIMARY KEY,value TEXT);"
-            "CREATE TABLE retired_panels(guild_id INTEGER,channel_id INTEGER,message_id INTEGER PRIMARY KEY);"
+            "CREATE TABLE retired_panels(guild_id INTEGER,channel_id INTEGER,"
+            "message_id INTEGER PRIMARY KEY);"
             "INSERT INTO guilds VALUES(123);"
             "INSERT INTO roles VALUES(123,'priest',11);"
             "INSERT INTO panels VALUES(123,22,33);"
@@ -40,7 +43,9 @@ def v3_database(tmp_path):
             migrate_characters(db)
             db.execute("INSERT INTO rosters VALUES(123,456,42)")
             db.executemany(
-                "INSERT INTO characters(id,guild_id,user_id,primary_name,secondary_name,name_key,class_id,created_at,updated_at) VALUES(?,123,456,?,?,?,?,?,?)",
+                "INSERT INTO characters(id,guild_id,user_id,primary_name,"
+                "secondary_name,name_key,class_id,created_at,updated_at) "
+                "VALUES(?,123,456,?,?,?,?,?,?)",
                 [
                     (
                         42,
@@ -65,7 +70,8 @@ def v3_database(tmp_path):
             payload = named(kind="edit", character_id=42, class_id="warrior")
             payload.pop("gameplay_role")
             db.execute(
-                "INSERT INTO character_operations VALUES(123,456,'interrupted',?,'[11]','[22]','prepared')",
+                "INSERT INTO character_operations"
+                " VALUES(123,456,'interrupted',?,'[11]','[22]','prepared')",
                 (json.dumps(payload),),
             )
             db.execute("PRAGMA user_version=3")

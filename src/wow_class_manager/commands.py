@@ -99,7 +99,8 @@ class Controller:
                     or interaction.message.author.id != self.bot.user.id
                 ):
                     raise UserError(
-                        "This panel is no longer active. Use the current class panel or the class slash command."
+                        "This panel is no longer active. Use the current class panel or"
+                        " the class slash command."
                     )
             if action in {"setup", "sync", "status"}:
                 authorize(interaction, roles=action in {"setup", "sync"})
@@ -143,13 +144,16 @@ class Controller:
                     raise UserError(
                         "Your account needs these permissions in the selected channel: "
                         + ", ".join(missing)
-                        + ". Ask a server administrator to check your channel permissions, or choose a channel where you can post.",
+                        + ". Ask a server administrator to check your channel"
+                        " permissions, or choose a channel where you can post.",
                         code="invoker_channel_permissions",
                     )
                 previous = await self.store.panel(guild.id)
                 if previous and previous.channel_id != target.id and channel is None:
                     raise UserError(
-                        f"A panel already exists in another channel. To move it, run {self.settings.command('setup')} with the channel option explicitly selected."
+                        "A panel already exists in another channel. To move it, run"
+                        f" {self.settings.command('setup')} with the channel option"
+                        " explicitly selected."
                     )
                 # Validate channel permissions before creating any roles.
                 operation = "fetch_setup_channel"
@@ -160,12 +164,14 @@ class Controller:
                 saved, warnings = await self.panels.setup(guild, target.id)
                 result.warnings.extend(warnings)
                 text = (
-                    f"Class panel ready: https://discord.com/channels/{guild.id}/{saved.channel_id}/{saved.message_id}\n"
-                    + result.summary()
+                    "Class panel ready:"
+                    f" https://discord.com/channels/{guild.id}/"
+                    f"{saved.channel_id}/{saved.message_id}\n" + result.summary()
                 )
                 self.bot.notifier.notify(
                     f"setup:{guild.id}",
-                    f"Class panel setup completed in guild {guild.id}.\n{result.summary()}",
+                    "Class panel setup completed in guild"
+                    f" {guild.id}.\n{result.summary()}",
                 )
             elif action == "sync":
                 operation = "reconcile_roles"
@@ -197,16 +203,39 @@ class Controller:
                 if roster and roster.main:
                     from .character_ui import class_name, safe_text
 
-                    text = f"Your main character: {safe_text(roster.main.full_name)} ({class_name(roster.main.class_id)})."
+                    text = (
+                        f"Your main character: {safe_text(roster.main.full_name)}"
+                        f" ({class_name(roster.main.class_id)})."
+                    )
                 else:
                     text = await self.bot.members.current(guild, interaction.user.id)
             else:
-                text = f"Choose your primary class in the dropdown, or use {self.settings.command('set')}. Change it any time; unrelated roles are kept.\n{self.settings.command('me')} shows your class."
+                text = (
+                    "Choose your primary class in the dropdown, or use"
+                    f" {self.settings.command('set')}. Change it any time; unrelated"
+                    f" roles are kept.\n{self.settings.command('me')} shows your class."
+                )
                 if self.settings.enable_character_management:
-                    text = f"Use Manage Characters or /{self.settings.character_command_root} add to register your main and alts. Choosing another main automatically makes the old main an alt. /{self.settings.character_command_root} list shows your roster.\nMembers without registered characters can still use {self.settings.command('set')}."
+                    text = (
+                        "Use Manage Characters or"
+                        f" /{self.settings.character_command_root} add to register your"
+                        " main and alts. Choosing another main automatically makes the"
+                        f" old main an alt. /{self.settings.character_command_root}"
+                        " list shows your roster.\nMembers without registered"
+                        f" characters can still use {self.settings.command('set')}."
+                    )
                 if self.settings.allow_clear_selection:
-                    text += f"\n{self.settings.command('clear')} clears a legacy class-only selection. Registered characters use Remove Character with a replacement main, or remove the last character when clearing is enabled."
-                text += f"\nOfficers: {self.settings.command('setup')} publishes the panel, {self.settings.command('sync')} reconciles roles, and {self.settings.command('status')} checks permissions and colors."
+                    text += (
+                        f"\n{self.settings.command('clear')} clears a legacy class-only"
+                        " selection. Registered characters use Remove Character with a"
+                        " replacement main, or remove the last character when clearing"
+                        " is enabled."
+                    )
+                text += (
+                    f"\nOfficers: {self.settings.command('setup')} publishes the panel,"
+                    f" {self.settings.command('sync')} reconciles roles, and"
+                    f" {self.settings.command('status')} checks permissions and colors."
+                )
             operation = "send_confirmation"
             await respond(interaction, self.bot.redact(text))
             if action in {"setup", "sync"}:
@@ -259,15 +288,22 @@ class Controller:
             else:
                 if error.type == discord.AppCommandOptionType.channel:
                     message = (
-                        "The selected channel could not be resolved. Choose an existing server text channel the bot can view, "
-                        "or run setup directly in that channel without the channel option."
+                        "The selected channel could not be resolved. Choose an existing"
+                        " server text channel the bot can view, or run setup directly"
+                        " in that channel without the channel option."
                     )
                 else:
-                    message = "The selected command option could not be resolved. Reopen the command and select it again."
+                    message = (
+                        "The selected command option could not be resolved. Reopen the"
+                        " command and select it again."
+                    )
         elif isinstance(error, discord.HTTPException):
             message = api_problem(error)
         else:
-            message = "The request could not be completed. Please try again; ask an officer to check the bot logs if it persists."
+            message = (
+                "The request could not be completed. Please try again; ask an officer"
+                " to check the bot logs if it persists."
+            )
         if isinstance(error, UserError):
             log.info(
                 "interaction_rejected guild_id=%s action=%s operation=%s reason=%s",
@@ -278,7 +314,8 @@ class Controller:
             )
         else:
             log.error(
-                "interaction_failed guild_id=%s action=%s operation=%s error_type=%s http_status=%s discord_code=%s",
+                "interaction_failed guild_id=%s action=%s operation=%s error_type=%s"
+                " http_status=%s discord_code=%s",
                 interaction.guild_id,
                 action,
                 operation,
@@ -288,7 +325,8 @@ class Controller:
             )
             self.bot.notifier.notify(
                 f"error:{interaction.guild_id}",
-                f"Class manager request failed in guild {interaction.guild_id}: {type(error).__name__}. Check bot logs and status.",
+                f"Class manager request failed in guild {interaction.guild_id}:"
+                f" {type(error).__name__}. Check bot logs and status.",
             )
         try:
             if respond_with is not None:
@@ -301,7 +339,8 @@ class Controller:
                 )
         except discord.HTTPException as response_error:
             log.warning(
-                "interaction_response_unavailable guild_id=%s action=%s http_status=%s discord_code=%s",
+                "interaction_response_unavailable guild_id=%s action=%s http_status=%s"
+                " discord_code=%s",
                 interaction.guild_id,
                 action,
                 response_error.status,

@@ -294,8 +294,8 @@ async def test_authenticated_identity_is_logged_without_secrets(
     monkeypatch.setattr(bot, "_spawn", lambda coroutine, name: coroutine.close())
     await bot.setup_hook()
     assert (
-        "discord_authenticated bot_id=456 application_id=123 configured_application_id=auto"
-        in caplog.text
+        "discord_authenticated bot_id=456 application_id=123"
+        " configured_application_id=auto" in caplog.text
     )
     assert settings.token not in caplog.text
 

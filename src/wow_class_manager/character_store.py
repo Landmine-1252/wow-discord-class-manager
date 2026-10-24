@@ -113,14 +113,17 @@ def migrate_characters(db: sqlite3.Connection) -> None:
         required = {"id", "guild_id", "user_id", "name", "class_id"}
         if not required <= columns or "primary_name" in columns:
             raise StorageError(
-                "An unrecognized legacy characters schema was found. No character data was changed; restore a backup and use a compatible migration."
+                "An unrecognized legacy characters schema was found. No character data"
+                " was changed; restore a backup and use a compatible migration."
             )
         reserved = db.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('legacy_characters_v2', 'rosters', 'character_operations')"
+            "SELECT name FROM sqlite_master WHERE type='table' AND name IN"
+            " ('legacy_characters_v2', 'rosters', 'character_operations')"
         ).fetchone()
         if reserved:
             raise StorageError(
-                "Legacy character tables conflict with the new schema. No data was changed; request a migration for this schema."
+                "Legacy character tables conflict with the new schema. No data was"
+                " changed; request a migration for this schema."
             )
         cursor = db.execute("SELECT * FROM characters")
         keys = [column[0] for column in cursor.description]
@@ -138,7 +141,8 @@ def migrate_characters(db: sqlite3.Connection) -> None:
                 )
             ):
                 raise StorageError(
-                    "Legacy characters contain unsupported identifiers or empty names. Migration was rolled back without deleting records."
+                    "Legacy characters contain unsupported identifiers or empty names."
+                    " Migration was rolled back without deleting records."
                 )
             key = (
                 row["guild_id"],
@@ -147,11 +151,15 @@ def migrate_characters(db: sqlite3.Connection) -> None:
             )
             if key in seen_names:
                 raise StorageError(
-                    "Legacy characters contain duplicate normalized names in one roster. Migration was rolled back without deleting records; request a compatible migration or correct the original names from a backup."
+                    "Legacy characters contain duplicate normalized names in one"
+                    " roster. Migration was rolled back without deleting records;"
+                    " request a compatible migration or correct the original names from"
+                    " a backup."
                 )
             seen_names.add(key)
         db.execute("ALTER TABLE characters RENAME TO legacy_characters_v2")
-    db.execute("""CREATE TABLE rosters (
+    db.execute(
+        """CREATE TABLE rosters (
             guild_id INTEGER NOT NULL REFERENCES guilds(guild_id),
             user_id INTEGER NOT NULL CHECK(user_id > 0),
             main_character_id INTEGER,
@@ -159,8 +167,10 @@ def migrate_characters(db: sqlite3.Connection) -> None:
             FOREIGN KEY(main_character_id, guild_id, user_id)
                 REFERENCES characters(id, guild_id, user_id)
                 DEFERRABLE INITIALLY DEFERRED
-        )""")
-    db.execute("""CREATE TABLE characters (
+        )""",
+    )
+    db.execute(
+        """CREATE TABLE characters (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             guild_id INTEGER NOT NULL REFERENCES guilds(guild_id),
             user_id INTEGER NOT NULL CHECK(user_id > 0),
@@ -174,15 +184,23 @@ def migrate_characters(db: sqlite3.Connection) -> None:
             UNIQUE(id, guild_id, user_id),
             UNIQUE(guild_id, user_id, name_key),
             CHECK(name_key = character_name_key(primary_name, secondary_name)),
-            CHECK((secondary_name = '' AND legacy_name IS NOT NULL)
-                OR (character_name_valid(primary_name) AND character_name_valid(secondary_name))),
+            CHECK(
+                (secondary_name = '' AND legacy_name IS NOT NULL)
+                OR (
+                    character_name_valid(primary_name)
+                    AND character_name_valid(secondary_name)
+                )
+            ),
             FOREIGN KEY(guild_id, user_id) REFERENCES rosters(guild_id, user_id)
                 DEFERRABLE INITIALLY DEFERRED
-        )""")
-    db.execute(
-        "CREATE INDEX characters_guild_class ON characters(guild_id, class_id, name_key)"
+        )""",
     )
-    db.execute("""CREATE TABLE character_operations (
+    db.execute(
+        "CREATE INDEX characters_guild_class ON characters(guild_id, class_id,"
+        " name_key)"
+    )
+    db.execute(
+        """CREATE TABLE character_operations (
             guild_id INTEGER NOT NULL,
             user_id INTEGER NOT NULL,
             op_id TEXT NOT NULL UNIQUE,
@@ -193,7 +211,8 @@ def migrate_characters(db: sqlite3.Connection) -> None:
             PRIMARY KEY(guild_id, user_id),
             FOREIGN KEY(guild_id, user_id) REFERENCES rosters(guild_id, user_id)
                 ON DELETE CASCADE
-        )""")
+        )""",
+    )
     imported: dict[tuple[int, int], list[dict[str, Any]]] = {}
     for row in legacy_rows:
         owner = (row["guild_id"], row["user_id"])
@@ -201,7 +220,10 @@ def migrate_characters(db: sqlite3.Connection) -> None:
         db.execute("INSERT OR IGNORE INTO rosters VALUES (?, ?, NULL)", owner)
         now = datetime.now(UTC).isoformat()
         db.execute(
-            "INSERT INTO characters (id,guild_id,user_id,primary_name,secondary_name,name_key,class_id,created_at,updated_at,legacy_name) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO characters "
+            "(id,guild_id,user_id,primary_name,secondary_name,name_key,"
+            "class_id,created_at,updated_at,legacy_name) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?)",
             (
                 row["id"],
                 *owner,
@@ -230,9 +252,12 @@ class CharacterStore:
 
     def _characters(self, where: str, parameters: tuple[Any, ...]) -> list[Character]:
         rows = self.store.db.execute(
-            "SELECT c.id,c.guild_id,c.user_id,c.primary_name,c.secondary_name,c.class_id,c.created_at,c.updated_at,COALESCE(c.id=r.main_character_id,0),c.legacy_name,c.gameplay_role FROM characters c JOIN rosters r ON r.guild_id=c.guild_id AND r.user_id=c.user_id WHERE "
-            + where
-            + " ORDER BY c.id",
+            "SELECT c.id,c.guild_id,c.user_id,c.primary_name,c.secondary_name,"
+            "c.class_id,c.created_at,c.updated_at,"
+            "COALESCE(c.id=r.main_character_id,0),c.legacy_name,c.gameplay_role "
+            "FROM characters c "
+            "JOIN rosters r ON r.guild_id=c.guild_id AND r.user_id=c.user_id "
+            "WHERE " + where + " ORDER BY c.id",
             parameters,
         ).fetchall()
         return [Character(*row[:8], bool(row[8]), row[9], row[10]) for row in rows]
@@ -256,7 +281,8 @@ class CharacterStore:
         )
         if not matches:
             raise UserError(
-                "That character is not in your roster in this server. Refresh your character list."
+                "That character is not in your roster in this server. Refresh your"
+                " character list."
             )
         return matches[0]
 
@@ -293,7 +319,8 @@ class CharacterStore:
 
     def _pending(self, guild_id: int, user_id: int) -> Operation | None:
         row = self.store.db.execute(
-            "SELECT op_id,payload,previous_roles,wanted_roles,created_at FROM character_operations WHERE guild_id=? AND user_id=?",
+            "SELECT op_id,payload,previous_roles,wanted_roles,created_at FROM"
+            " character_operations WHERE guild_id=? AND user_id=?",
             (guild_id, user_id),
         ).fetchone()
         if row is None:
@@ -363,7 +390,8 @@ class CharacterStore:
                 )
         if kind == "promote" and character.needs_completion:
             raise UserError(
-                "Complete this legacy character's two name fields with Edit Character before selecting it as main."
+                "Complete this legacy character's two name fields with Edit Character"
+                " before selecting it as main."
             )
         if kind == "remove" and character.is_main and len(roster.characters) > 1:
             replacement = self._character(
@@ -404,7 +432,9 @@ class CharacterStore:
                     ):
                         return
                     raise UserError(
-                        "An interrupted character operation must be recovered before making another change. Open Manage Characters to retry recovery."
+                        "An interrupted character operation must be recovered before"
+                        " making another change. Open Manage Characters to retry"
+                        " recovery."
                     )
                 self._validate(guild_id, user_id, payload)
                 self.store.db.execute(
@@ -439,7 +469,8 @@ class CharacterStore:
                     return self._roster(guild_id, user_id)
                 if operation.op_id != op_id:
                     raise UserError(
-                        "A different character operation is pending. Refresh your roster before retrying."
+                        "A different character operation is pending. Refresh your"
+                        " roster before retrying."
                     )
                 payload = operation.payload
                 self._validate(guild_id, user_id, payload)
@@ -448,7 +479,10 @@ class CharacterStore:
                 now = datetime.now(UTC).isoformat()
                 if kind == "add":
                     cursor = self.store.db.execute(
-                        "INSERT INTO characters(guild_id,user_id,primary_name,secondary_name,name_key,class_id,gameplay_role,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
+                        "INSERT INTO characters(guild_id,user_id,primary_name,"
+                        "secondary_name,name_key,class_id,gameplay_role,"
+                        "created_at,updated_at) "
+                        "VALUES (?,?,?,?,?,?,?,?,?)",
                         (
                             guild_id,
                             user_id,
@@ -463,17 +497,21 @@ class CharacterStore:
                     )
                     if roster.main is None:
                         self.store.db.execute(
-                            "UPDATE rosters SET main_character_id=? WHERE guild_id=? AND user_id=?",
+                            "UPDATE rosters SET main_character_id=? WHERE guild_id=?"
+                            " AND user_id=?",
                             (cursor.lastrowid, guild_id, user_id),
                         )
                 elif kind == "promote":
                     self.store.db.execute(
-                        "UPDATE rosters SET main_character_id=? WHERE guild_id=? AND user_id=?",
+                        "UPDATE rosters SET main_character_id=? WHERE guild_id=? AND"
+                        " user_id=?",
                         (payload["character_id"], guild_id, user_id),
                     )
                 elif kind == "edit":
                     self.store.db.execute(
-                        "UPDATE characters SET primary_name=?, secondary_name=?, name_key=?, class_id=?, gameplay_role=?, updated_at=? WHERE id=? AND guild_id=? AND user_id=?",
+                        "UPDATE characters SET primary_name=?, secondary_name=?,"
+                        " name_key=?, class_id=?, gameplay_role=?, updated_at=? WHERE"
+                        " id=? AND guild_id=? AND user_id=?",
                         (
                             payload["primary_name"],
                             payload["secondary_name"],
@@ -489,17 +527,20 @@ class CharacterStore:
                 elif kind == "remove":
                     if roster.main_character_id == payload["character_id"]:
                         self.store.db.execute(
-                            "UPDATE rosters SET main_character_id=? WHERE guild_id=? AND user_id=?",
+                            "UPDATE rosters SET main_character_id=? WHERE guild_id=?"
+                            " AND user_id=?",
                             (payload.get("replacement_id"), guild_id, user_id),
                         )
                     self.store.db.execute(
-                        "DELETE FROM characters WHERE id=? AND guild_id=? AND user_id=?",
+                        "DELETE FROM characters WHERE id=? AND guild_id=? AND"
+                        " user_id=?",
                         (payload["character_id"], guild_id, user_id),
                     )
                     self._erase_legacy(guild_id, user_id, payload["character_id"])
                 elif kind == "purge":
                     self.store.db.execute(
-                        "UPDATE rosters SET main_character_id=NULL WHERE guild_id=? AND user_id=?",
+                        "UPDATE rosters SET main_character_id=NULL WHERE guild_id=? AND"
+                        " user_id=?",
                         (guild_id, user_id),
                     )
                     self.store.db.execute(
@@ -508,7 +549,8 @@ class CharacterStore:
                     )
                     self._erase_legacy(guild_id, user_id)
                 self.store.db.execute(
-                    "DELETE FROM character_operations WHERE guild_id=? AND user_id=? AND op_id=?",
+                    "DELETE FROM character_operations WHERE guild_id=? AND user_id=?"
+                    " AND op_id=?",
                     (guild_id, user_id, op_id),
                 )
                 self._delete_empty_roster(guild_id, user_id)
@@ -519,7 +561,9 @@ class CharacterStore:
 
     def _delete_empty_roster(self, guild_id: int, user_id: int) -> None:
         self.store.db.execute(
-            "DELETE FROM rosters WHERE guild_id=? AND user_id=? AND NOT EXISTS(SELECT 1 FROM characters WHERE guild_id=? AND user_id=?) AND NOT EXISTS(SELECT 1 FROM character_operations WHERE guild_id=? AND user_id=?)",
+            "DELETE FROM rosters WHERE guild_id=? AND user_id=? AND NOT EXISTS(SELECT 1"
+            " FROM characters WHERE guild_id=? AND user_id=?) AND NOT EXISTS(SELECT 1"
+            " FROM character_operations WHERE guild_id=? AND user_id=?)",
             (guild_id, user_id, guild_id, user_id, guild_id, user_id),
         )
 
@@ -527,7 +571,8 @@ class CharacterStore:
         def discard() -> None:
             with self.store.db:
                 self.store.db.execute(
-                    "DELETE FROM character_operations WHERE guild_id=? AND user_id=? AND op_id=?",
+                    "DELETE FROM character_operations WHERE guild_id=? AND user_id=?"
+                    " AND op_id=?",
                     (guild_id, user_id, op_id),
                 )
                 self._delete_empty_roster(guild_id, user_id)
@@ -538,7 +583,8 @@ class CharacterStore:
         self, guild_id: int, user_id: int, character_id: int | None = None
     ) -> None:
         if self.store.db.execute(
-            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='legacy_characters_v2'"
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND"
+            " name='legacy_characters_v2'"
         ).fetchone():
             if character_id is None:
                 self.store.db.execute(
@@ -547,7 +593,8 @@ class CharacterStore:
                 )
             else:
                 self.store.db.execute(
-                    "DELETE FROM legacy_characters_v2 WHERE guild_id=? AND user_id=? AND id=?",
+                    "DELETE FROM legacy_characters_v2 WHERE guild_id=? AND user_id=?"
+                    " AND id=?",
                     (guild_id, user_id, character_id),
                 )
 
@@ -562,7 +609,8 @@ class CharacterStore:
                     (guild_id, user_id),
                 )
                 self.store.db.execute(
-                    "UPDATE rosters SET main_character_id=NULL WHERE guild_id=? AND user_id=?",
+                    "UPDATE rosters SET main_character_id=NULL WHERE guild_id=? AND"
+                    " user_id=?",
                     (guild_id, user_id),
                 )
                 self.store.db.execute(

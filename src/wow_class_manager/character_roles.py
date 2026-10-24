@@ -17,5 +17,6 @@ def validate_gameplay_role(class_id: str, gameplay_role: str | None) -> None:
     if not supports_gameplay_role(class_id, gameplay_role):
         allowed = ", ".join(GAMEPLAY_ROLES[role] for role in definition.gameplay_roles)
         raise UserError(
-            f"{definition.name} cannot select {role_name(gameplay_role)}. Choose {allowed}."
+            f"{definition.name} cannot select {role_name(gameplay_role)}. Choose"
+            f" {allowed}."
         )

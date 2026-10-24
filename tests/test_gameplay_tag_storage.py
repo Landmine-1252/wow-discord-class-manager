@@ -25,7 +25,8 @@ def v4_database(v3_database):
             db.execute("BEGIN IMMEDIATE")
             migrate_character_roles(db)
             db.execute(
-                "UPDATE characters SET gameplay_role=CASE WHEN id=42 THEN 'healing' ELSE 'dps' END"
+                "UPDATE characters SET gameplay_role=CASE WHEN id=42 THEN 'healing'"
+                " ELSE 'dps' END"
             )
             payload = json.loads(
                 db.execute("SELECT payload FROM character_operations").fetchone()[0]

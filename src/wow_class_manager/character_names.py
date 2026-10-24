@@ -60,7 +60,8 @@ def validate_names(
             raise UserError(f"{label} must contain {minimum}–{maximum} characters.")
         if not valid_component(normalized):
             raise UserError(
-                f"{label} must contain letters and optional accents only, without spaces, punctuation, mentions or invisible characters."
+                f"{label} must contain letters and optional accents only, without"
+                " spaces, punctuation, mentions or invisible characters."
             )
         result.append(normalized)
     return result[0], result[1], normalized_name_key(*result)

@@ -23,7 +23,8 @@ async def run(settings: Settings) -> None:
         settings.log_level, settings.token, settings.admin_webhook_url or ""
     )
     log.info(
-        "startup_checks_started version=%s command_scope=%s enabled_classes=%s allowed_guild_count=%s",
+        "startup_checks_started version=%s command_scope=%s enabled_classes=%s"
+        " allowed_guild_count=%s",
         __version__,
         settings.command_sync_scope,
         len(settings.classes),
@@ -41,7 +42,8 @@ async def run(settings: Settings) -> None:
             await asyncio.to_thread(write_health, settings.health_path, "starting")
         except OSError:
             log.error(
-                "startup_health_file_failed; check HEALTH_PATH and writable /tmp permissions"
+                "startup_health_file_failed; check HEALTH_PATH and writable /tmp"
+                " permissions"
             )
             raise
         log.info("startup_health_file_ok")
@@ -90,7 +92,8 @@ def main() -> None:
         raise SystemExit(2) from None
     except discord.LoginFailure:
         log.error(
-            "discord_login_failed: token rejected; reset it in Developer Portal → Bot and update the configured token source."
+            "discord_login_failed: token rejected; reset it in Developer Portal → Bot"
+            " and update the configured token source."
         )
         raise SystemExit(2) from None
     except StorageError as error:
@@ -100,7 +103,8 @@ def main() -> None:
         pass
     except Exception as error:
         log.error(
-            "application_failed error_type=%s; check network, permissions and configuration",
+            "application_failed error_type=%s; check network, permissions and"
+            " configuration",
             type(error).__name__,
         )
         raise SystemExit(1) from None

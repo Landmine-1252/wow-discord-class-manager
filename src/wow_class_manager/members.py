@@ -58,7 +58,8 @@ class MemberManager:
         key = (guild_id, member_id)
         if key in self._cooldowns:
             raise UserError(
-                f"Please wait {self._cooldowns[key] - now:.0f} seconds before changing class again."
+                f"Please wait {self._cooldowns[key] - now:.0f} seconds before changing"
+                " class again."
             )
         self._cooldowns[key] = now + self.settings.role_change_cooldown
 
@@ -72,7 +73,9 @@ class MemberManager:
                 roster = await characters.roster(guild.id, member_id)
                 if roster.characters or await characters.pending(guild.id, member_id):
                     raise UserError(
-                        f"Your registered main determines your class. Use /{self.settings.character_command_root} main or Manage Characters to select or register a main."
+                        "Your registered main determines your class. Use"
+                        f" /{self.settings.character_command_root} main or Manage"
+                        " Characters to select or register a main."
                     )
             self.check_cooldown(guild.id, member_id)
             plan = await self.plan_locked(
@@ -129,22 +132,20 @@ class MemberManager:
             tag_mapping = await self.store.gameplay_roles(guild.id)
         if set(mapping.values()) & set(tag_mapping.values()):
             raise UserError(
-                "Class roles and gameplay tags have conflicting associations. Ask an officer to check role setup."
+                "Class roles and gameplay tags have conflicting associations. Ask an"
+                " officer to check role setup."
             )
         roles = {role.id: role for role in await guild.fetch_roles()}
         member = await guild.fetch_member(member_id)
         if member.bot:
             raise UserError("Class selection is available to human server members.")
         held = {role.id for role in member.roles}
-        active_ids = (
-            (
-                set(mapping.values())
-                if include_disabled
-                else {mapping[cid] for cid in enabled if cid in mapping}
-            )
-            if sync_class
-            else set()
-        )
+        if not sync_class:
+            active_ids = set()
+        elif include_disabled:
+            active_ids = set(mapping.values())
+        else:
+            active_ids = {mapping[cid] for cid in enabled if cid in mapping}
         if sync_gameplay:
             active_ids.update(tag_mapping.values())
         previous = active_ids & held
@@ -155,18 +156,21 @@ class MemberManager:
             and (target is None or target not in roles)
         ):
             raise UserError(
-                f"This class role is not ready. Ask an officer to run {self.settings.command('sync')}."
+                "This class role is not ready. Ask an officer to run"
+                f" {self.settings.command('sync')}."
             )
         wanted = {target} if target is not None else set()
         if sync_gameplay and gameplay_role is not None:
             tag = tag_mapping.get(gameplay_role)
             if tag is None or tag not in roles:
                 raise UserError(
-                    f"The gameplay role tag is not ready. Ask an officer to run {self.settings.command('sync')}."
+                    "The gameplay role tag is not ready. Ask an officer to run"
+                    f" {self.settings.command('sync')}."
                 )
             if roles[tag].colour.value:
                 raise UserError(
-                    "The gameplay role tag must use the default color so your class color is preserved. Ask an officer to run sync."
+                    "The gameplay role tag must use the default color so your class"
+                    " color is preserved. Ask an officer to run sync."
                 )
             wanted.add(tag)
         for rid in previous | wanted:
@@ -201,7 +205,8 @@ class MemberManager:
             raise UserError(f"The role change is unavailable: {reason}.")
         if neutral and role.colour.value:
             raise UserError(
-                "The gameplay role tag must use the default color. Ask an officer to run sync."
+                "The gameplay role tag must use the default color. Ask an officer to"
+                " run sync."
             )
         return role
 
@@ -236,7 +241,8 @@ class MemberManager:
             confirmed = await guild.fetch_member(member_id)
             if {role.id for role in confirmed.roles} & plan.managed_ids != plan.wanted:
                 raise UserError(
-                    "Discord did not confirm the expected character roles; another role change may have occurred."
+                    "Discord did not confirm the expected character roles; another role"
+                    " change may have occurred."
                 )
         except asyncio.CancelledError:
             if recover:
@@ -264,7 +270,10 @@ class MemberManager:
             recovery = (
                 "Your previous class roles were restored."
                 if restored
-                else "The previous state could not be confirmed. Ask an officer to check your class roles before retrying."
+                else (
+                    "The previous state could not be confirmed. Ask an officer to check"
+                    " your class roles before retrying."
+                )
             )
             raise UserError(
                 f"The class change was not completed. {detail} {recovery}"

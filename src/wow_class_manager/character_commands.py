@@ -75,7 +75,10 @@ def build_character_commands(controller: CharacterController) -> app_commands.Gr
         description="Delete a member's stored character data (Manage Server + Roles)",
     )
     @app_commands.describe(
-        user="The owner whose character data should be deleted, including a departed user"
+        user=(
+            "The owner whose character data should be deleted, including a departed"
+            " user"
+        )
     )
     async def purge(interaction: discord.Interaction, user: discord.User) -> None:
         await controller.purge_prompt(interaction, user)
@@ -96,9 +99,12 @@ def build_character_commands(controller: CharacterController) -> app_commands.Gr
             ]
             return [
                 app_commands.Choice(
-                    name=f"{safe_text(entry.full_name, 55)} | {class_name(entry.class_id)} | {role_name(entry.gameplay_role)} | {'Main' if entry.is_main else 'Alt'}"[
-                        :100
-                    ],
+                    name=(
+                        f"{safe_text(entry.full_name, 55)} | "
+                        f"{class_name(entry.class_id)} | "
+                        f"{role_name(entry.gameplay_role)} | "
+                        f"{'Main' if entry.is_main else 'Alt'}"
+                    )[:100],
                     value=str(entry.id),
                 )
                 for entry in entries[:25]

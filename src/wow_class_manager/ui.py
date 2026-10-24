@@ -44,7 +44,11 @@ class ClassSelect(discord.ui.Select):
             min_values=1,
             max_values=1,
             options=[
-                discord.SelectOption(label=entry.definition.name, value=entry.id)
+                discord.SelectOption(
+                    label=entry.definition.name,
+                    value=entry.id,
+                    emoji=entry.definition.emoji,
+                )
                 for entry in controller.settings.display_classes
             ],
         )
@@ -121,7 +125,8 @@ class PanelManager:
         channel = await guild.fetch_channel(channel_id)
         if not isinstance(channel, discord.TextChannel) or channel.guild.id != guild.id:
             raise UserError(
-                "Choose a server text channel for the class panel; threads, forums and DMs are not supported."
+                "Choose a server text channel for the class panel; threads, forums and"
+                " DMs are not supported."
             )
         missing = missing_channel_permissions(channel, guild.me)
         if missing:
@@ -153,7 +158,8 @@ class PanelManager:
                     raise
             if message and message.author.id != self.controller.bot.user.id:
                 raise UserError(
-                    "The stored panel is not owned by this bot. Restore the correct database/token pair; no message was changed."
+                    "The stored panel is not owned by this bot. Restore the correct"
+                    " database/token pair; no message was changed."
                 )
         view = (
             CharacterView(self.controller)
@@ -184,7 +190,8 @@ class PanelManager:
             await self.store.save_panel(panel)
         except Exception:
             if previous is None or previous.message_id != message.id:
-                # Prevent an unsaved panel from looking usable; never touch other messages.
+                # Prevent an unsaved panel from looking usable.
+                # Only this bot-owned panel may be edited.
                 try:
                     await message.edit(view=None)
                 except discord.HTTPException:
@@ -207,7 +214,9 @@ class PanelManager:
                 await self.store.forget_retired(panel.message_id)
             except discord.HTTPException:
                 warnings.append(
-                    "The old panel could not be disabled visually. Its actions are already inactive; restore channel access or remove that old bot message manually."
+                    "The old panel could not be disabled visually. Its actions are"
+                    " already inactive; restore channel access or remove that old bot"
+                    " message manually."
                 )
         return warnings
 

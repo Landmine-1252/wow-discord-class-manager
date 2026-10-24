@@ -46,7 +46,14 @@ async def test_schema_migrates_v1(tmp_path):
     path = tmp_path / "old.sqlite3"
     with closing(sqlite3.connect(path)) as db:
         db.executescript(
-            "CREATE TABLE guilds (guild_id INTEGER PRIMARY KEY); CREATE TABLE roles (guild_id INTEGER, class_id TEXT, role_id INTEGER, PRIMARY KEY(guild_id,class_id)); CREATE TABLE panels (guild_id INTEGER PRIMARY KEY, channel_id INTEGER, message_id INTEGER); INSERT INTO guilds VALUES (123); INSERT INTO roles VALUES (123,'mage',456); PRAGMA user_version=1;"
+            "CREATE TABLE guilds (guild_id INTEGER PRIMARY KEY); "
+            "CREATE TABLE roles (guild_id INTEGER, class_id TEXT, role_id INTEGER,"
+            " PRIMARY KEY(guild_id,class_id)); "
+            "CREATE TABLE panels (guild_id INTEGER PRIMARY KEY, channel_id INTEGER,"
+            " message_id INTEGER); "
+            "INSERT INTO guilds VALUES (123); "
+            "INSERT INTO roles VALUES (123,'mage',456); "
+            "PRAGMA user_version=1;"
         )
     store = Store(path)
     await store.open()
@@ -95,12 +102,18 @@ async def test_retired_panel_transaction(store):
         (
             "waiting_for_guild",
             1,
-            "waiting_for_guild: install the bot in an allowed server; check startup logs",
+            (
+                "waiting_for_guild: install the bot in an allowed server; check startup"
+                " logs"
+            ),
         ),
         (
             "degraded",
             1,
-            "degraded: startup checks found a configuration or server problem; check logs",
+            (
+                "degraded: startup checks found a configuration or server problem;"
+                " check logs"
+            ),
         ),
     ],
 )

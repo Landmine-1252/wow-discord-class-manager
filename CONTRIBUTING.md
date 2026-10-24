@@ -14,7 +14,15 @@ uv run --no-sync pytest --cov=wow_class_manager --cov-report=term-missing
 docker build -t wow-discord-class-manager:local .
 ```
 
-No real Discord credentials are required for tests. To format changes, run `uv run black .` and `uv run ruff check . --fix`. Ruff's `I` rules enforce import ordering. In restricted environments use `black --workers 1` and a writable cache directory.
+No real Discord credentials are required for tests. To format changes, run `uv run --no-sync black .` and `uv run --no-sync ruff check . --fix` after syncing. Ruff enforces import ordering and the 88-character Python line limit. In restricted environments use `black --workers 1` and a writable cache directory.
+
+## Readable source
+
+- Follow `.editorconfig` for indentation, UTF-8, LF line endings and final newlines.
+- Keep Python lines within 88 characters. Split long messages into adjacent string literals inside parentheses, keeping sentence boundaries and existing spaces/newlines intact. Split SQL at column or clause boundaries so queries remain easy to review.
+- Use consistent named fields and one argument per line for registry records. A trailing comma keeps their layout stable under Black.
+- Prefer explicit `if`/`elif`/`else` branches when a conditional expression would contain another conditional.
+- Keep tests and embedded CI scripts as readable as application code. Formatting changes must preserve messages, SQL parameters, component IDs and runtime behavior.
 
 For real integration work create a separate test application and guild, use guild-scoped commands and a writable development database path as shown in [configuration](docs/configuration.md). Launch with `uv run --env-file .env python -m wow_class_manager`. Never point tests at a production token or database.
 

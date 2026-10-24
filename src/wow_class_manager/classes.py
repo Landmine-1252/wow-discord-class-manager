@@ -1,6 +1,6 @@
-"""The only registry of stable class IDs, labels, colors and gameplay roles."""
+"""The only registry of stable class IDs, labels, icons, colors and gameplay roles."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 GAMEPLAY_ROLES = {"dps": "DPS", "healing": "Healing", "tank": "Tank"}
 GAMEPLAY_ROLE_EMOJIS = {"dps": "⚔️", "healing": "💚", "tank": "🛡️"}
@@ -16,24 +16,117 @@ class WowClass:
     id: str
     name: str
     color: int
+    # Class-themed Unicode symbols need no custom emoji upload or guild setup.
+    emoji: str = field(kw_only=True)
     classic: bool = True
     gameplay_roles: tuple[str, ...] = ("dps",)
 
 
 CLASSES = (
-    WowClass("warrior", "Warrior", 0xC69B6D, gameplay_roles=("dps", "tank")),
-    WowClass("paladin", "Paladin", 0xF48CBA, gameplay_roles=("dps", "healing", "tank")),
-    WowClass("hunter", "Hunter", 0xAAD372),
-    WowClass("rogue", "Rogue", 0xFFF468),
-    WowClass("priest", "Priest", 0xFFFFFF, gameplay_roles=("dps", "healing")),
-    WowClass("shaman", "Shaman", 0x0070DD, gameplay_roles=("dps", "healing")),
-    WowClass("mage", "Mage", 0x3FC7EB),
-    WowClass("warlock", "Warlock", 0x8788EE),
-    WowClass("druid", "Druid", 0xFF7C0A, gameplay_roles=("dps", "healing", "tank")),
-    WowClass("death_knight", "Death Knight", 0xC41E3A, False, ("dps", "tank")),
-    WowClass("monk", "Monk", 0x00FF98, False, ("dps", "healing", "tank")),
-    WowClass("demon_hunter", "Demon Hunter", 0xA330C9, False, ("dps", "tank")),
-    WowClass("evoker", "Evoker", 0x33937F, False, ("dps", "healing")),
+    WowClass(
+        id="warrior",
+        name="Warrior",
+        color=0xC69B6D,
+        emoji="🪓",
+        classic=True,
+        gameplay_roles=("dps", "tank"),
+    ),
+    WowClass(
+        id="paladin",
+        name="Paladin",
+        color=0xF48CBA,
+        emoji="🔨",
+        classic=True,
+        gameplay_roles=("dps", "healing", "tank"),
+    ),
+    WowClass(
+        id="hunter",
+        name="Hunter",
+        color=0xAAD372,
+        emoji="🏹",
+        classic=True,
+        gameplay_roles=("dps",),
+    ),
+    WowClass(
+        id="rogue",
+        name="Rogue",
+        color=0xFFF468,
+        emoji="🗡️",
+        classic=True,
+        gameplay_roles=("dps",),
+    ),
+    WowClass(
+        id="priest",
+        name="Priest",
+        color=0xFFFFFF,
+        emoji="✨",
+        classic=True,
+        gameplay_roles=("dps", "healing"),
+    ),
+    WowClass(
+        id="shaman",
+        name="Shaman",
+        color=0x0070DD,
+        emoji="⚡",
+        classic=True,
+        gameplay_roles=("dps", "healing"),
+    ),
+    WowClass(
+        id="mage",
+        name="Mage",
+        color=0x3FC7EB,
+        emoji="🔮",
+        classic=True,
+        gameplay_roles=("dps",),
+    ),
+    WowClass(
+        id="warlock",
+        name="Warlock",
+        color=0x8788EE,
+        emoji="🔥",
+        classic=True,
+        gameplay_roles=("dps",),
+    ),
+    WowClass(
+        id="druid",
+        name="Druid",
+        color=0xFF7C0A,
+        emoji="🌿",
+        classic=True,
+        gameplay_roles=("dps", "healing", "tank"),
+    ),
+    WowClass(
+        id="death_knight",
+        name="Death Knight",
+        color=0xC41E3A,
+        emoji="💀",
+        classic=False,
+        gameplay_roles=("dps", "tank"),
+    ),
+    WowClass(
+        id="monk",
+        name="Monk",
+        color=0x00FF98,
+        emoji="🥋",
+        classic=False,
+        gameplay_roles=("dps", "healing", "tank"),
+    ),
+    WowClass(
+        id="demon_hunter",
+        name="Demon Hunter",
+        color=0xA330C9,
+        emoji="🦇",
+        classic=False,
+        gameplay_roles=("dps", "tank"),
+    ),
+    WowClass(
+        id="evoker",
+        name="Evoker",
+        color=0x33937F,
+        emoji="🐉",
+        classic=False,
+        gameplay_roles=("dps", "healing"),
+    ),
 )
 REGISTRY = {entry.id: entry for entry in CLASSES}
 DEFAULT_CLASSES = tuple(entry.id for entry in CLASSES if entry.classic)

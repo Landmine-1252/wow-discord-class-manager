@@ -83,7 +83,8 @@ class ClassBot(discord.Client):
         application = self.application
         if application is not None:
             log.info(
-                "discord_authenticated bot_id=%s application_id=%s configured_application_id=%s version=%s",
+                "discord_authenticated bot_id=%s application_id=%s"
+                " configured_application_id=%s version=%s",
                 self.user.id if self.user else None,
                 application.id,
                 self.settings.application_id or "auto",
@@ -94,11 +95,14 @@ class ClassBot(discord.Client):
                 and self.settings.application_id != application.id
             ):
                 raise ConfigError(
-                    "DISCORD_APPLICATION_ID does not match the application authenticated by the bot token. Use the ID from that application's General Information page, or leave it unset."
+                    "DISCORD_APPLICATION_ID does not match the application"
+                    " authenticated by the bot token. Use the ID from that"
+                    " application's General Information page, or leave it unset."
                 )
             if application.interactions_endpoint_url:
                 raise ConfigError(
-                    "Clear Interactions Endpoint URL in the Discord Developer Portal. This bot receives interactions through the Gateway."
+                    "Clear Interactions Endpoint URL in the Discord Developer Portal."
+                    " This bot receives interactions through the Gateway."
                 )
         # Registered before the first READY, independent of cached messages.
         self.add_view(ClassView(self.controller, register_all=True))
@@ -165,14 +169,17 @@ class ClassBot(discord.Client):
             except Exception as error:
                 self._command_error = True
                 log.error(
-                    "command_registration_failed error_type=%s http_status=%s discord_code=%s retry_seconds=60; check Guild Install, bot and applications.commands scopes, application ID and command scope",
+                    "command_registration_failed error_type=%s http_status=%s"
+                    " discord_code=%s retry_seconds=60; check Guild Install, bot and"
+                    " applications.commands scopes, application ID and command scope",
                     type(error).__name__,
                     getattr(error, "status", None),
                     getattr(error, "code", None),
                 )
                 self.notifier.notify(
                     "command-registration",
-                    "Command registration failed. Check the application's installation scopes, application ID and connectivity. Retrying automatically.",
+                    "Command registration failed. Check the application's installation"
+                    " scopes, application ID and connectivity. Retrying automatically.",
                 )
                 await asyncio.sleep(60)
 
@@ -281,7 +288,14 @@ class ClassBot(discord.Client):
         )
         if not guild_ids:
             log.warning(
-                "startup_no_guilds application_id=%s; connected to Discord but no servers are installed. Enable Guild Install and invite this application with bot and applications.commands scopes; adding only a user app or commands is insufficient. Confirm the token belongs to the invited application. invite=https://discord.com/oauth2/authorize?client_id=%s&integration_type=0&scope=bot%%20applications.commands&permissions=268520448",
+                "startup_no_guilds application_id=%s; connected to Discord but no"
+                " servers are installed. Enable Guild Install and invite this"
+                " application with bot and applications.commands scopes; adding only a"
+                " user app or commands is insufficient. Confirm the token belongs to"
+                " the invited application."
+                " invite=https://discord.com/oauth2/authorize"
+                "?client_id=%s&integration_type=0"
+                "&scope=bot%%20applications.commands&permissions=268520448",
                 application_id,
                 application_id,
             )
@@ -290,7 +304,9 @@ class ClassBot(discord.Client):
             expected.add(self.settings.development_guild_id)
         for guild_id in sorted(expected - guild_ids):
             log.warning(
-                "startup_guild_missing guild_id=%s application_id=%s; invite the bot to this configured server or correct ALLOWED_GUILD_IDS/DEVELOPMENT_GUILD_ID",
+                "startup_guild_missing guild_id=%s application_id=%s; invite the bot to"
+                " this configured server or correct"
+                " ALLOWED_GUILD_IDS/DEVELOPMENT_GUILD_ID",
                 guild_id,
                 application_id,
             )
@@ -299,7 +315,8 @@ class ClassBot(discord.Client):
         if not self.settings.allowed(guild.id):
             if guild.id not in self._skipped_guilds:
                 log.warning(
-                    "guild_skipped guild_id=%s reason=not_allowlisted; add this server ID to ALLOWED_GUILD_IDS to enable it",
+                    "guild_skipped guild_id=%s reason=not_allowlisted; add this server"
+                    " ID to ALLOWED_GUILD_IDS to enable it",
                     guild.id,
                 )
                 self._skipped_guilds.add(guild.id)
@@ -350,7 +367,8 @@ class ClassBot(discord.Client):
             self._prepared.discard(guild.id)
             self._guild_issues[guild.id] = ("Server diagnostics failed; see bot logs.",)
             log.error(
-                "guild_check_failed guild_id=%s error_type=%s http_status=%s discord_code=%s; check database access and Discord connectivity",
+                "guild_check_failed guild_id=%s error_type=%s http_status=%s"
+                " discord_code=%s; check database access and Discord connectivity",
                 guild.id,
                 type(error).__name__,
                 getattr(error, "status", None),
@@ -365,7 +383,8 @@ class ClassBot(discord.Client):
             check.warnings.append("Discord reports this server unavailable.")
         self._guild_issues[guild.id] = tuple(check.warnings)
         log.info(
-            "guild_startup_check guild_id=%s manage_roles=%s associated_roles=%s manageable_roles=%s enabled_classes=%s panel=%s result=%s",
+            "guild_startup_check guild_id=%s manage_roles=%s associated_roles=%s"
+            " manageable_roles=%s enabled_classes=%s panel=%s result=%s",
             guild.id,
             check.manage_roles,
             check.associated,
@@ -376,7 +395,8 @@ class ClassBot(discord.Client):
         )
         if check.panel_state == "not_configured":
             log.info(
-                "panel_not_configured guild_id=%s; run %s in the desired text channel to publish the character/class panel",
+                "panel_not_configured guild_id=%s; run %s in the desired text channel"
+                " to publish the character/class panel",
                 guild.id,
                 self.settings.command("setup"),
             )
@@ -427,7 +447,9 @@ class ClassBot(discord.Client):
                 self._prepared.discard(guild.id)
                 self._guild_issues[guild.id] = ("Startup checks failed; see bot logs.",)
                 log.error(
-                    "guild_setup_failed guild_id=%s error_type=%s http_status=%s discord_code=%s; check server installation, role/channel permissions and database access",
+                    "guild_setup_failed guild_id=%s error_type=%s http_status=%s"
+                    " discord_code=%s; check server installation, role/channel"
+                    " permissions and database access",
                     guild.id,
                     type(error).__name__,
                     getattr(error, "status", None),
@@ -435,7 +457,8 @@ class ClassBot(discord.Client):
                 )
                 self.notifier.notify(
                     f"startup:{guild.id}",
-                    f"Guild {guild.id}: startup setup failed ({type(error).__name__}). Check permissions, database access and connectivity.",
+                    f"Guild {guild.id}: startup setup failed ({type(error).__name__})."
+                    " Check permissions, database access and connectivity.",
                 )
             await asyncio.sleep(300)
 

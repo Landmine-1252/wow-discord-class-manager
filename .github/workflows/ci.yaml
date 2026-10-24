@@ -24,7 +24,10 @@ jobs:
       - name: Black formatting
         run: uv run --no-sync black --check .
       - name: Unit and integration tests (mock Discord)
-        run: uv run --no-sync pytest --cov=wow_class_manager --cov-report=term-missing
+        run: >-
+          uv run --no-sync pytest
+          --cov=wow_class_manager
+          --cov-report=term-missing
       - name: Validate Compose
         run: |
           cp .env.example .env
@@ -43,5 +46,37 @@ jobs:
           tags: wow-class-manager:ci
       - name: Container imports and non-root SQLite write
         run: |
-          docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges --tmpfs /tmp --entrypoint python wow-class-manager:ci -c 'import os, discord; from wow_class_manager.bot import ClassBot; assert os.getuid() == 10001; print(discord.__version__)'
-          docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges --tmpfs /tmp --mount type=volume,destination=/data --entrypoint python wow-class-manager:ci -c 'import asyncio; from pathlib import Path; from wow_class_manager.storage import Store; s = Store(Path("/data/smoke.sqlite3")); asyncio.run(s.open()); asyncio.run(s.close())'
+          docker run --rm --interactive \
+            --read-only \
+            --cap-drop ALL \
+            --security-opt no-new-privileges \
+            --tmpfs /tmp \
+            --entrypoint python \
+            wow-class-manager:ci - <<'PY'
+          import os
+
+          import discord
+
+          from wow_class_manager.bot import ClassBot
+
+          assert os.getuid() == 10001
+          print(discord.__version__, ClassBot.__name__)
+          PY
+
+          docker run --rm --interactive \
+            --read-only \
+            --cap-drop ALL \
+            --security-opt no-new-privileges \
+            --tmpfs /tmp \
+            --mount type=volume,destination=/data \
+            --entrypoint python \
+            wow-class-manager:ci - <<'PY'
+          import asyncio
+          from pathlib import Path
+
+          from wow_class_manager.storage import Store
+
+          store = Store(Path("/data/smoke.sqlite3"))
+          asyncio.run(store.open())
+          asyncio.run(store.close())
+          PY

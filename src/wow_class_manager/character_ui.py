@@ -15,8 +15,8 @@ import aiohttp
 import discord
 
 from .character_names import normalized_name_key, validate_names
-from .character_roles import role_name, validate_gameplay_role
-from .classes import GAMEPLAY_ROLE_EMOJIS, GAMEPLAY_ROLE_TAGS, GAMEPLAY_ROLES, REGISTRY
+from .character_roles import validate_gameplay_role
+from .classes import GAMEPLAY_ROLE_TAGS, REGISTRY
 from .roles import UserError, require_bot_member, require_guild
 from .storage import StorageError
 
@@ -60,6 +60,11 @@ def class_name(class_id: str) -> str:
     return definition.name if definition else "Unavailable class"
 
 
+def class_emoji(class_id: str) -> str | None:
+    definition = REGISTRY.get(class_id)
+    return definition.emoji if definition else None
+
+
 def class_color(settings: Settings, class_id: str | None) -> int:
     configured = next(
         (entry for entry in settings.classes if entry.id == class_id), None
@@ -87,10 +92,11 @@ def character_options(
         discord.SelectOption(
             label=safe_text(entry.full_name, 100),
             value=str(entry.id),
-            emoji=GAMEPLAY_ROLE_EMOJIS.get(entry.gameplay_role),
+            emoji=class_emoji(entry.class_id),
             default=default_main and entry.is_main,
             description=(
-                f"{class_name(entry.class_id)} | {role_name(entry.gameplay_role)} | {'Current Main' if entry.is_main else 'Alt'}"
+                f"{class_name(entry.class_id)} | {role_badge(entry.gameplay_role)} |"
+                f" {'Current Main' if entry.is_main else 'Alt'}"
                 + (" | Complete name first" if entry.needs_completion else "")
                 + (
                     " | " + safe_text(entry.secondary_name, 50)
@@ -180,7 +186,10 @@ class CharacterController:
         message = interaction.message
         return (
             interaction.type
-            in (discord.InteractionType.component, discord.InteractionType.modal_submit)
+            in (
+                discord.InteractionType.component,
+                discord.InteractionType.modal_submit,
+            )
             and message is not None
             and getattr(getattr(message, "flags", None), "ephemeral", False) is True
             and message.author.id == self.bot.user.id
@@ -238,7 +247,8 @@ class CharacterController:
             guild_id is not None and guild.id != guild_id
         ):
             raise UserError(
-                "This private character menu belongs to another member or server. Open your own menu."
+                "This private character menu belongs to another member or server. Open"
+                " your own menu."
             )
         require_bot_member(guild, client=interaction.client)
         return guild
@@ -276,7 +286,8 @@ class CharacterController:
                     or interaction.message.author.id != self.bot.user.id
                 ):
                     raise UserError(
-                        "This panel is no longer active. Open the current character panel or use the character commands."
+                        "This panel is no longer active. Open the current character"
+                        " panel or use the character commands."
                     )
             operation = callback.__name__
             if defer:
@@ -289,7 +300,8 @@ class CharacterController:
                         and self._private_views.get(message_id) is not previous
                     ):
                         raise UserError(
-                            "This menu has just changed. Use the current controls to continue."
+                            "This menu has just changed. Use the current controls to"
+                            " continue."
                         )
                     await callback(guild)
             else:
@@ -352,7 +364,7 @@ class CharacterController:
         selected_id: int | None = None,
         selected_name_key: str | None = None,
     ) -> None:
-        """Show confirmed success alongside fresh controls without another role write."""
+        """Show confirmed success and fresh controls without another role write."""
         try:
             roster = await self.manager.roster(
                 interaction.guild, interaction.user.id, reconcile=False
@@ -404,14 +416,18 @@ class CharacterController:
                 warning = (
                     str(error)
                     if isinstance(error, UserError)
-                    else "Discord could not confirm your main's class role. Your saved roster is available; reopen this menu to retry synchronization."
+                    else (
+                        "Discord could not confirm your main's class role. Your saved"
+                        " roster is available; reopen this menu to retry"
+                        " synchronization."
+                    )
                 )
             if not roster.characters:
                 try:
                     legacy = await self.bot.members.current(guild, interaction.user.id)
                     warning = (
-                        legacy
-                        + " Register your main character to begin managing your characters and alts."
+                        legacy + " Register your main character to begin managing your"
+                        " characters and alts."
                     )
                 except (
                     discord.DiscordException,
@@ -419,7 +435,10 @@ class CharacterController:
                     OSError,
                     TimeoutError,
                 ):
-                    warning = "Register your main character to begin. Existing class roles remain until registration succeeds."
+                    warning = (
+                        "Register your main character to begin. Existing class roles"
+                        " remain until registration succeeds."
+                    )
             await self.send_roster(
                 interaction, roster, page=page, warning=warning, selected_id=selected_id
             )
@@ -457,7 +476,8 @@ class CharacterController:
         )
         lines = (
             [
-                "Choose a character to preview it. **Make Main** sets your Discord class color and gameplay tag."
+                "Choose a character to preview it. **Make Main** sets your Discord"
+                " class color and gameplay tag."
             ]
             if entries
             else []
@@ -468,19 +488,27 @@ class CharacterController:
             designation = "⭐ Main" if character.is_main else "Alt"
             completion = " • Name incomplete" if character.needs_completion else ""
             lines.append(
-                f"**{safe_text(character.full_name, 110)}**\n{class_name(character.class_id)} • {role_badge(character.gameplay_role)} • {designation}{completion}"
+                f"**{safe_text(character.full_name, 110)}**\n"
+                f"{class_name(character.class_id)}"
+                f" • {role_badge(character.gameplay_role)} • {designation}{completion}"
             )
         if not entries:
             lines.append(
-                "Start with **Add Character** below. Enter both name parts and choose **Class & Role**, then submit to save. Your first character becomes your main and sets your class color and gameplay tag.\n\n⚔️ **DPS** · Deal damage\n💚 **Healing** · Support your allies\n🛡️ **Tank** · Protect your allies"
+                "Start with **Add Character** below. Enter both name parts and choose"
+                " **Class & Role**, then submit to save. Your first character becomes"
+                " your main and sets your class color and gameplay tag.\n\n⚔️ **DPS** ·"
+                " Deal damage\n💚 **Healing** · Support your allies\n🛡️ **Tank** ·"
+                " Protect your allies"
             )
         elif roster.main is None:
             lines.append(
-                "\nNo main is designated. Complete any unfinished name, select a character, then choose Make Main."
+                "\nNo main is designated. Complete any unfinished name, select a"
+                " character, then choose Make Main."
             )
         if at_limit:
             lines.append(
-                f"You have reached this server's limit of {limit} characters. Edit or remove a character before adding another."
+                f"You have reached this server's limit of {limit} characters. Edit or"
+                " remove a character before adding another."
             )
         if any(character.needs_completion for character in entries):
             lines.append("Use Edit to complete each unfinished two-part name.")
@@ -490,10 +518,19 @@ class CharacterController:
             colour=class_color(self.settings, selected.class_id if selected else None),
         )
         embed.set_footer(
-            text=f"Page {page + 1}/{pages} • {len(ordered)} character{'s' if len(ordered) != 1 else ''} • Closes after 5 minutes idle"
+            text=(
+                f"Page {page + 1}/{pages} • {len(ordered)}"
+                f" character{'s' if len(ordered) != 1 else ''} • Closes after 5 minutes"
+                " idle"
+            )
         )
         if selected:
-            detail = f"**{safe_text(selected.full_name, 110)}**\n{class_name(selected.class_id)} • {role_badge(selected.gameplay_role)} • {'⭐ Main' if selected.is_main else 'Alt'}"
+            detail = (
+                f"**{safe_text(selected.full_name, 110)}**\n"
+                f"{class_name(selected.class_id)}"
+                f" • {role_badge(selected.gameplay_role)} •"
+                f" {'⭐ Main' if selected.is_main else 'Alt'}"
+            )
             if selected.gameplay_role is None:
                 detail += (
                     "\nUse Edit to choose DPS, Healing or Tank for this character."
@@ -503,20 +540,34 @@ class CharacterController:
                 and len(ordered) == 1
                 and not self.settings.allow_clear_selection
             ):
-                detail += "\nThis server requires a main character. Edit this character or add a replacement before removing it."
+                detail += (
+                    "\nThis server requires a main character. Edit this character or"
+                    " add a replacement before removing it."
+                )
             if selected.needs_completion:
-                detail += "\nComplete both name fields with Edit before making this your main."
+                detail += (
+                    "\nComplete both name fields with Edit before making this your"
+                    " main."
+                )
             if selected.class_id not in {entry.id for entry in self.settings.classes}:
                 detail += (
-                    "\nThis class is disabled. Edit the class or choose another character to make main."
+                    "\nThis class is disabled. Edit the class or choose another"
+                    " character to make main."
                     if self.settings.allow_character_class_edit
-                    else "\nThis class is disabled. Choose a character with an enabled class to make main."
+                    else (
+                        "\nThis class is disabled. Choose a character with an enabled"
+                        " class to make main."
+                    )
                 )
             embed.add_field(name="Selected Character", value=detail, inline=False)
         if roster.main is not None and page > 0:
             embed.add_field(
                 name="Current Main",
-                value=f"⭐ {safe_text(roster.main.full_name, 110)} • {class_name(roster.main.class_id)} • {role_badge(roster.main.gameplay_role)}",
+                value=(
+                    f"⭐ {safe_text(roster.main.full_name, 110)} •"
+                    f" {class_name(roster.main.class_id)} •"
+                    f" {role_badge(roster.main.gameplay_role)}"
+                ),
                 inline=False,
             )
         await self.send(
@@ -555,7 +606,8 @@ class CharacterController:
             await self.send(
                 interaction,
                 content=message
-                + "\n\nYour entries are kept below. Choose Edit Details to try again, or Back to Characters to review your roster.",
+                + "\n\nYour entries are kept below. Choose Edit Details to try again,"
+                " or Back to Characters to review your roster.",
                 view=RetryCharacterView(
                     self, interaction.guild_id, interaction.user.id, character, draft
                 ),
@@ -602,7 +654,10 @@ class CharacterController:
                 await self.send_roster(
                     interaction,
                     roster,
-                    notice="Register your first character below. It will automatically become your main.",
+                    notice=(
+                        "Register your first character below. It will automatically"
+                        " become your main."
+                    ),
                 )
                 return
             if selected:
@@ -649,7 +704,8 @@ class CharacterController:
         )
         if character is None:
             raise UserError(
-                "That character is no longer in your roster. Reopen the menu and select one of your characters."
+                "That character is no longer in your roster. Reopen the menu and select"
+                " one of your characters."
             )
         return character
 
@@ -667,7 +723,11 @@ class CharacterController:
         if character.is_main and alternatives:
             await self.send(
                 interaction,
-                content=f"Choose a replacement main before removing **{safe_text(character.full_name)}**. No character changes until you confirm.",
+                content=(
+                    "Choose a replacement main before removing"
+                    f" **{safe_text(character.full_name)}**. No character changes until"
+                    " you confirm."
+                ),
                 view=CharacterPicker(
                     self,
                     interaction.guild_id,
@@ -681,7 +741,8 @@ class CharacterController:
             return
         if character.is_main and not self.settings.allow_clear_selection:
             raise UserError(
-                "Removing your last character is disabled for this server. Edit it, add a replacement, or ask an officer to allow an empty roster."
+                "Removing your last character is disabled for this server. Edit it, add"
+                " a replacement, or ask an officer to allow an empty roster."
             )
         await self.confirm_removal(interaction, character, None)
 
@@ -693,9 +754,15 @@ class CharacterController:
     ) -> None:
         text = f"Remove **{safe_text(character.full_name)}** from your roster?"
         if replacement:
-            text += f" **{safe_text(replacement.full_name)}** will become your main before the old main is removed."
+            text += (
+                f" **{safe_text(replacement.full_name)}** will become your main before"
+                " the old main is removed."
+            )
         elif character.is_main:
-            text += " This clears your main and removes its managed class role and gameplay tag."
+            text += (
+                " This clears your main and removes its managed class role and gameplay"
+                " tag."
+            )
         await self.send(
             interaction,
             content=text,
@@ -709,7 +776,27 @@ class CharacterController:
             root = self.settings.character_command_root
             await self.send(
                 interaction,
-                content=f"Open My Characters to add a character or select one to Edit, Make Main or Remove. Enter a First Name and Secondary Name, then choose **Class & Role** in the same form. Choices stay grouped by class and show only supported roles: ⚔️ DPS, 💚 Healing or 🛡️ Tank. Submit once to save. Your first character becomes main; later characters become alts.\n`/{root} main` switches mains and automatically makes the previous main an alt. Your main sets your Discord class color and a ⚔️ DPS, 💚 Healing or 🛡️ Tank role tag. Click a member's name or avatar in this server to see their tag in their profile; no boosts or Nitro needed. Gameplay roles also appear in the roster. Use Edit to change a role or complete an older character's role.\n`/{root} list`, `/{root} edit` and `/{root} remove` also open private workflows. Removal always asks for confirmation.\nDone closes your menu; inactive menus close after five minutes. Names and ownership are self-reported; registration does not verify game availability or ownership.",
+                content=(
+                    "Open My Characters to add a character or select one to "
+                    "Edit, Make Main or Remove. "
+                    "Enter a First Name and Secondary Name, then choose "
+                    "**Class & Role** in the same form. "
+                    "Choices stay grouped by class and show only supported roles: "
+                    "⚔️ DPS, 💚 Healing or 🛡️ Tank. Submit once to save. "
+                    "Your first character becomes main; later characters become alts.\n"
+                    f"`/{root} main` switches mains and automatically makes "
+                    "the previous main an alt. Your main sets your Discord class "
+                    "color and a ⚔️ DPS, 💚 Healing or 🛡️ Tank role tag. "
+                    "Click a member's name or avatar in this server to see their "
+                    "tag in their profile; no boosts or Nitro needed. "
+                    "Gameplay roles also appear in the roster. Use Edit to change "
+                    "a role or complete an older character's role.\n"
+                    f"`/{root} list`, `/{root} edit` and `/{root} remove` also open "
+                    "private workflows. Removal always asks for confirmation.\n"
+                    "Done closes your menu; inactive menus close after five minutes. "
+                    "Names and ownership are self-reported; registration does not "
+                    "verify game availability or ownership."
+                ),
                 view=BackView(self, guild.id, interaction.user.id),
             )
 
@@ -722,7 +809,12 @@ class CharacterController:
             self.authorize_purge(interaction)
             await self.send(
                 interaction,
-                content=f"Permanently delete all stored characters for <@{target.id}> in this server? This cannot be undone. Discord roles remain unchanged as a legacy class-only selection. This also works for a member who has left the server.",
+                content=(
+                    f"Permanently delete all stored characters for <@{target.id}> in"
+                    " this server? This cannot be undone. Discord roles remain"
+                    " unchanged as a legacy class-only selection. This also works for"
+                    " a member who has left the server."
+                ),
                 view=PurgeConfirmation(self, guild.id, interaction.user.id, target.id),
             )
 
@@ -735,7 +827,8 @@ class CharacterController:
             or not interaction.permissions.manage_roles
         ):
             raise UserError(
-                "Manage Server and Manage Roles are required to delete another member's stored character data."
+                "Manage Server and Manage Roles are required to delete another member's"
+                " stored character data."
             )
 
     async def guild_roster(
@@ -822,7 +915,8 @@ class OwnedView(discord.ui.View):
                 and self.controller._private_views.get(self.message_id) is not self
             ):
                 raise UserError(
-                    "This menu has been replaced or expired. Use the current controls or reopen My Characters."
+                    "This menu has been replaced or expired. Use the current controls"
+                    " or reopen My Characters."
                 )
             if (
                 self.message_id is not None
@@ -1163,23 +1257,21 @@ class CharacterModal(discord.ui.Modal):
             available[character.class_id] = REGISTRY[character.class_id]
         if not available:
             raise UserError(
-                "This character's saved class is unavailable. Ask an admin to enable character class editing."
+                "This character's saved class is unavailable. Ask an admin to enable"
+                " character class editing."
             )
-        saved_pair = (
-            (draft[2], draft[3])
-            if draft is not None
-            else (
-                (character.class_id, character.gameplay_role)
-                if character
-                else (None, None)
-            )
-        )
+        if draft is not None:
+            saved_pair = (draft[2], draft[3])
+        elif character is not None:
+            saved_pair = (character.class_id, character.gameplay_role)
+        else:
+            saved_pair = (None, None)
         enabled = {entry.id for entry in settings.classes}
         options = [
             discord.SelectOption(
-                label=f"{entry.name} · {GAMEPLAY_ROLES[role]}",
+                label=f"{entry.name} · {role_badge(role)}",
                 value=f"{entry.id}:{role}",
-                emoji=GAMEPLAY_ROLE_EMOJIS[role],
+                emoji=entry.emoji,
                 description=(
                     f"Saved class · {ROLE_DESCRIPTIONS[role]}"
                     if entry.id not in enabled
@@ -1226,7 +1318,8 @@ class CharacterModal(discord.ui.Modal):
                 self.source_view is not None and self.source_view.is_finished()
             ):
                 raise UserError(
-                    "This menu has closed or changed. Reopen My Characters to try again."
+                    "This menu has closed or changed. Reopen My Characters to try"
+                    " again."
                 )
             try:
                 validate_names(self.controller.settings, primary, secondary)
@@ -1373,7 +1466,10 @@ class CharacterPicker(OwnedView):
         if not entries:
             raise UserError("There are no characters to select. Reopen My Characters.")
         self.select = discord.ui.Select(
-            placeholder=f"{'Choose your main' if action == 'main' else 'Choose a character'} • page {self.page + 1}/{pages}",
+            placeholder=(
+                f"{'Choose your main' if action == 'main' else 'Choose a character'} •"
+                f" page {self.page + 1}/{pages}"
+            ),
             min_values=1,
             max_values=1,
             options=character_options(entries, default_main=action == "main"),
@@ -1420,7 +1516,8 @@ class CharacterPicker(OwnedView):
                 removed = self.controller.owned(roster, self.removed.id)
                 if not removed.is_main:
                     raise UserError(
-                        "Your main changed while this menu was open. Choose Remove Character again."
+                        "Your main changed while this menu was open. Choose Remove"
+                        " Character again."
                     )
                 await self.controller.confirm_removal(interaction, removed, character)
             else:
@@ -1486,7 +1583,8 @@ class RemovalConfirmation(OwnedView):
             async with self._lock:
                 if self.used:
                     raise UserError(
-                        "This confirmation has already been used. Open My Characters again."
+                        "This confirmation has already been used. Open My Characters"
+                        " again."
                     )
                 roster = await self.controller.manager.roster(
                     guild, self.owner_id, reconcile=False
@@ -1504,7 +1602,8 @@ class RemovalConfirmation(OwnedView):
                     self.character.is_main,
                 ):
                     raise UserError(
-                        "This character changed while the confirmation was open. Choose Remove Character again."
+                        "This character changed while the confirmation was open. Choose"
+                        " Remove Character again."
                     )
                 text = await self.controller.manager.remove(
                     guild,
@@ -1523,7 +1622,8 @@ class RemovalConfirmation(OwnedView):
             async with self._lock:
                 if self.used:
                     raise UserError(
-                        "This confirmation has already been completed. Reopen My Characters to view the result."
+                        "This confirmation has already been completed. Reopen My"
+                        " Characters to view the result."
                     )
                 self.used = True
                 self.stop()
@@ -1579,7 +1679,8 @@ class PurgeConfirmation(OwnedView):
             async with self._lock:
                 if self.used:
                     raise UserError(
-                        "This deletion confirmation has already been completed. Reopen My Characters to continue."
+                        "This deletion confirmation has already been completed. Reopen"
+                        " My Characters to continue."
                     )
                 self.used = True
                 self.stop()

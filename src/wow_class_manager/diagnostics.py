@@ -80,7 +80,9 @@ async def inspect_guild(
             and role.id not in mapping.values()
         ]
         check.details.append(
-            f"Higher-priority unrelated colored roles: {len(higher)}. Members holding one may show its color instead. Officers can review role order; this bot never reorders roles."
+            f"Higher-priority unrelated colored roles: {len(higher)}. Members holding"
+            " one may show its color instead. Officers can review role order; this bot"
+            " never reorders roles."
         )
     panel = await store.panel(guild.id)
     if not panel:
@@ -120,11 +122,15 @@ async def inspect_guild(
                 check.details.append(
                     "Panel: exists and owned by this bot."
                     if owned
-                    else "Panel: unexpected author; restore the matching token/database pair."
+                    else (
+                        "Panel: unexpected author; restore the matching token/database"
+                        " pair."
+                    )
                 )
                 if not owned:
                     check.warnings.append(
-                        "Panel has an unexpected author; restore the matching token/database pair."
+                        "Panel has an unexpected author; restore the matching"
+                        " token/database pair."
                     )
         except discord.NotFound as error:
             check.panel_state = (
@@ -142,7 +148,10 @@ async def status(settings: Settings, store: Store, guild: discord.Guild) -> str:
     lines = [
         f"WoW Class Manager v{__version__}",
         f"Guild: {guild.id}",
-        f"Enabled classes: {len(settings.classes)}; associated roles present: {check.associated}; manageable: {check.manageable}",
+        (
+            f"Enabled classes: {len(settings.classes)}; associated roles present:"
+            f" {check.associated}; manageable: {check.manageable}"
+        ),
         f"Command scope: {settings.command_sync_scope}",
         "Manage Roles: " + ("granted" if check.manage_roles else "MISSING"),
         *check.details,
@@ -151,9 +160,12 @@ async def status(settings: Settings, store: Store, guild: discord.Guild) -> str:
     if settings.enable_character_management:
         lines.insert(
             3,
-            f"Gameplay tags: {check.gameplay_associated}/3 present; manageable: {check.gameplay_manageable}. Click a member's name to see their main's tag in the server profile; no boosts needed.",
+            f"Gameplay tags: {check.gameplay_associated}/3 present; manageable:"
+            f" {check.gameplay_manageable}. Click a member's name to see their main's"
+            " tag in the server profile; no boosts needed.",
         )
     lines.append(
-        "Class roles must be cosmetic: no role permissions or channel grants. Disabled classes and unrelated member roles are preserved."
+        "Class roles must be cosmetic: no role permissions or channel grants. Disabled"
+        " classes and unrelated member roles are preserved."
     )
     return "\n".join(lines)

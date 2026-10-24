@@ -14,7 +14,8 @@ class Redactor:
         for secret in self.secrets:
             value = value.replace(secret, "[REDACTED]")
         value = re.sub(
-            r"https://(?:[\w.-]+\.)?discord(?:app)?\.com/api/(?:v\d+/)?webhooks/[^\s\"<>]+",
+            r"https://(?:[\w.-]+\.)?discord(?:app)?\.com/api/"
+            r"(?:v\d+/)?webhooks/[^\s\"<>]+",
             "[REDACTED_WEBHOOK]",
             value,
         )

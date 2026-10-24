@@ -37,12 +37,18 @@ def check_health(path: Path, max_age: float = 45) -> tuple[int, str]:
         if state == "waiting_for_guild":
             return (
                 1,
-                "waiting_for_guild: install the bot in an allowed server; check startup logs",
+                (
+                    "waiting_for_guild: install the bot in an allowed server; check"
+                    " startup logs"
+                ),
             )
         if state == "degraded":
             return (
                 1,
-                "degraded: startup checks found a configuration or server problem; check logs",
+                (
+                    "degraded: startup checks found a configuration or server problem;"
+                    " check logs"
+                ),
             )
         return 1, "disconnected"
     except (OSError, ValueError, KeyError, TypeError):

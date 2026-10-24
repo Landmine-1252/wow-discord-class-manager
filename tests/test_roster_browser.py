@@ -64,7 +64,7 @@ def button(browser, label):
     )
 
 
-async def test_browser_native_filters_only_include_enabled_classes_and_selected_defaults(
+async def test_browser_filters_include_enabled_classes_and_selected_defaults(
     browser_controller,
 ):
     browser = view(browser_controller, class_id="paladin", kind="alts", user_id=789)

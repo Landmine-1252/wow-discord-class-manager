@@ -120,7 +120,8 @@ class Settings:
             value = get(key, default)
             if (not value and not empty) or len(value) > limit or "\x00" in value:
                 raise ConfigError(
-                    f"{key} must contain {'0' if empty else '1'}–{limit} characters without NUL."
+                    f"{key} must contain {'0' if empty else '1'}–{limit} characters"
+                    " without NUL."
                 )
             return value
 
@@ -135,7 +136,8 @@ class Settings:
                     token = handle.read(4097).strip()
             except (OSError, UnicodeError):
                 raise ConfigError(
-                    "DISCORD_BOT_TOKEN_FILE could not be read; check the mount and permissions."
+                    "DISCORD_BOT_TOKEN_FILE could not be read; check the mount and"
+                    " permissions."
                 ) from None
         if (
             not re.fullmatch(
@@ -144,7 +146,8 @@ class Settings:
             or len(token) > 512
         ):
             raise ConfigError(
-                "The Discord bot token format is invalid. Copy the token from the Developer Portal's Bot page, without a Bot prefix."
+                "The Discord bot token format is invalid. Copy the token from the"
+                " Developer Portal's Bot page, without a Bot prefix."
             )
 
         enabled = tuple(
@@ -157,7 +160,8 @@ class Settings:
             or len(set(enabled)) != len(enabled)
         ):
             raise ConfigError(
-                "ENABLED_CLASSES must contain unique, comma-separated IDs from the class registry; see docs/configuration.md."
+                "ENABLED_CLASSES must contain unique, comma-separated IDs from the"
+                " class registry; see docs/configuration.md."
             )
         template = get("ROLE_NAME_TEMPLATE", "{name}")
         try:
@@ -172,7 +176,8 @@ class Settings:
             }
         except (ValueError, KeyError, IndexError):
             raise ConfigError(
-                "ROLE_NAME_TEMPLATE supports only the {name} placeholder, with no formatting or conversions."
+                "ROLE_NAME_TEMPLATE supports only the {name} placeholder, with no"
+                " formatting or conversions."
             ) from None
         configured = {}
         for key, entry in REGISTRY.items():
@@ -186,7 +191,8 @@ class Settings:
             configured
         ):
             raise ConfigError(
-                "Configured role names must be unique across all classes (case-insensitive)."
+                "Configured role names must be unique across all classes"
+                " (case-insensitive)."
             )
         known_overrides = {
             f"ROLE_{kind}_{key.upper()}"
@@ -198,7 +204,8 @@ class Settings:
             for key in e
         ):
             raise ConfigError(
-                "An unsupported ROLE_NAME_ or ROLE_COLOR_ setting was supplied; check the class IDs."
+                "An unsupported ROLE_NAME_ or ROLE_COLOR_ setting was supplied; check"
+                " the class IDs."
             )
 
         command_keys = ["SLASH_COMMAND_ROOT"] + [
@@ -211,7 +218,8 @@ class Settings:
         for key, value in zip(command_keys, commands, strict=True):
             if not re.fullmatch(r"[a-z0-9_-]{1,32}", value):
                 raise ConfigError(
-                    f"{key} must use 1–32 lowercase ASCII letters, digits, underscores or hyphens."
+                    f"{key} must use 1–32 lowercase ASCII letters, digits, underscores"
+                    " or hyphens."
                 )
         if len(set(commands[1:])) != len(SUBCOMMANDS):
             raise ConfigError("Slash subcommand names must be unique.")
@@ -220,7 +228,8 @@ class Settings:
         character_root = get("CHARACTER_COMMAND_ROOT", "character")
         if not re.fullmatch(r"[a-z0-9_-]{1,32}", character_root):
             raise ConfigError(
-                "CHARACTER_COMMAND_ROOT must use 1–32 lowercase ASCII letters, digits, underscores or hyphens."
+                "CHARACTER_COMMAND_ROOT must use 1–32 lowercase ASCII letters, digits,"
+                " underscores or hyphens."
             )
         visibility = get("ROSTER_VISIBILITY", "members")
         if visibility not in {"members", "admins", "disabled"}:
@@ -256,11 +265,13 @@ class Settings:
         scope = get("COMMAND_SYNC_SCOPE", "global")
         if scope not in {"global", "guild"} or (scope == "guild" and dev_guild is None):
             raise ConfigError(
-                "COMMAND_SYNC_SCOPE must be global or guild; guild requires DEVELOPMENT_GUILD_ID."
+                "COMMAND_SYNC_SCOPE must be global or guild; guild requires"
+                " DEVELOPMENT_GUILD_ID."
             )
         if dev_guild and allowed and dev_guild not in allowed:
             raise ConfigError(
-                "DEVELOPMENT_GUILD_ID must be in ALLOWED_GUILD_IDS when an allowlist is configured."
+                "DEVELOPMENT_GUILD_ID must be in ALLOWED_GUILD_IDS when an allowlist is"
+                " configured."
             )
         try:
             cooldown = float(get("ROLE_CHANGE_COOLDOWN_SECONDS", "3"))
@@ -268,7 +279,8 @@ class Settings:
                 raise ValueError
         except ValueError:
             raise ConfigError(
-                "ROLE_CHANGE_COOLDOWN_SECONDS must be a finite number between 0 and 3600."
+                "ROLE_CHANGE_COOLDOWN_SECONDS must be a finite number between 0 and"
+                " 3600."
             ) from None
         level = get("LOG_LEVEL", "INFO").upper()
         if level not in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}:
@@ -277,11 +289,13 @@ class Settings:
             )
         webhook = get("ADMIN_WEBHOOK_URL") or None
         if webhook and not re.fullmatch(
-            r"https://discord\.com/api/(?:v10/)?webhooks/[0-9]{1,20}/[A-Za-z0-9_-]{20,200}",
+            r"https://discord\.com/api/(?:v10/)?webhooks/"
+            r"[0-9]{1,20}/[A-Za-z0-9_-]{20,200}",
             webhook,
         ):
             raise ConfigError(
-                "ADMIN_WEBHOOK_URL must be an HTTPS discord.com/api/webhooks/ID/TOKEN URL, without query parameters."
+                "ADMIN_WEBHOOK_URL must be an HTTPS discord.com/api/webhooks/ID/TOKEN"
+                " URL, without query parameters."
             )
         title = text("PANEL_TITLE", "Choose Your Class", 256)
         character_title = text(
@@ -296,7 +310,8 @@ class Settings:
         active_title = character_title if characters_enabled else title
         if len(active_title) + len(description) + len(footer) > 6000:
             raise ConfigError(
-                "The active panel title, PANEL_DESCRIPTION and PANEL_FOOTER together must not exceed 6000 characters."
+                "The active panel title, PANEL_DESCRIPTION and PANEL_FOOTER together"
+                " must not exceed 6000 characters."
             )
         database = Path(get("DATABASE_PATH", "/data/classes.sqlite3"))
         health = Path(get("HEALTH_PATH", "/tmp/wow-class-manager-health.json"))

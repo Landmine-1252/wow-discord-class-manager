@@ -266,7 +266,8 @@ async def test_database_constraints_directly(characters, store):
     def foreign_main():
         with store.db:
             store.db.execute(
-                "UPDATE rosters SET main_character_id=? WHERE guild_id=123 AND user_id=456",
+                "UPDATE rosters SET main_character_id=? WHERE guild_id=123 AND"
+                " user_id=456",
                 (other.id,),
             )
 
@@ -284,7 +285,11 @@ async def test_database_constraints_directly(characters, store):
     def duplicate_name():
         with store.db:
             store.db.execute(
-                "INSERT INTO characters(guild_id,user_id,primary_name,secondary_name,name_key,class_id,created_at,updated_at) SELECT guild_id,user_id,primary_name,secondary_name,name_key,class_id,created_at,updated_at FROM characters WHERE id=?",
+                "INSERT INTO characters(guild_id,user_id,primary_name,"
+                "secondary_name,name_key,class_id,created_at,updated_at) "
+                "SELECT guild_id,user_id,primary_name,secondary_name,name_key,"
+                "class_id,created_at,updated_at "
+                "FROM characters WHERE id=?",
                 (john.id,),
             )
 
@@ -316,7 +321,8 @@ async def test_database_rejects_invalid_names_without_service_validation(
     def invalid_name():
         with store.db:
             store.db.execute(
-                "UPDATE characters SET primary_name=?,secondary_name=?,name_key=? WHERE id=?",
+                "UPDATE characters SET primary_name=?,secondary_name=?,name_key=? WHERE"
+                " id=?",
                 (primary, secondary, name_key, john.id),
             )
 
@@ -336,7 +342,8 @@ async def test_commit_failure_rolls_back_and_leaves_journal(characters, store):
 
     def fail_delete():
         store.db.execute(
-            "CREATE TRIGGER simulate_disk_failure BEFORE DELETE ON character_operations BEGIN SELECT RAISE(ABORT, 'simulated failure'); END"
+            "CREATE TRIGGER simulate_disk_failure BEFORE DELETE ON character_operations"
+            " BEGIN SELECT RAISE(ABORT, 'simulated failure'); END"
         )
 
     await store._run(fail_delete)
@@ -369,7 +376,19 @@ async def test_v2_migration_preserves_guild_roles_panel_and_metadata(tmp_path):
     path = tmp_path / "v2.sqlite3"
     with closing(sqlite3.connect(path)) as db:
         db.executescript(
-            "CREATE TABLE guilds(guild_id INTEGER PRIMARY KEY); CREATE TABLE roles(guild_id INTEGER, class_id TEXT, role_id INTEGER, PRIMARY KEY(guild_id,class_id)); CREATE TABLE panels(guild_id INTEGER PRIMARY KEY,channel_id INTEGER,message_id INTEGER); CREATE TABLE metadata(key TEXT PRIMARY KEY,value TEXT); CREATE TABLE retired_panels(guild_id INTEGER,channel_id INTEGER,message_id INTEGER PRIMARY KEY); INSERT INTO guilds VALUES(123); INSERT INTO roles VALUES(123,'paladin',11); INSERT INTO panels VALUES(123,22,33); INSERT INTO metadata VALUES('config','preserved'); PRAGMA user_version=2;"
+            "CREATE TABLE guilds(guild_id INTEGER PRIMARY KEY); "
+            "CREATE TABLE roles(guild_id INTEGER, class_id TEXT, role_id INTEGER,"
+            " PRIMARY KEY(guild_id,class_id)); "
+            "CREATE TABLE panels(guild_id INTEGER PRIMARY KEY,channel_id INTEGER,"
+            "message_id INTEGER); "
+            "CREATE TABLE metadata(key TEXT PRIMARY KEY,value TEXT); "
+            "CREATE TABLE retired_panels(guild_id INTEGER,channel_id INTEGER,"
+            "message_id INTEGER PRIMARY KEY); "
+            "INSERT INTO guilds VALUES(123); "
+            "INSERT INTO roles VALUES(123,'paladin',11); "
+            "INSERT INTO panels VALUES(123,22,33); "
+            "INSERT INTO metadata VALUES('config','preserved'); "
+            "PRAGMA user_version=2;"
         )
     store = Store(path)
     await store.open()
@@ -396,7 +415,10 @@ async def test_legacy_single_names_preserved_and_can_be_completed(tmp_path):
     path = tmp_path / "legacy.sqlite3"
     with closing(sqlite3.connect(path)) as db:
         db.executescript(
-            "CREATE TABLE characters(id INTEGER PRIMARY KEY,guild_id INTEGER,user_id INTEGER,name TEXT,class_id TEXT,is_main INTEGER); INSERT INTO characters VALUES(42,123,456,'John Stormwind','paladin',1); INSERT INTO characters VALUES(43,123,456,'Sam','warrior',0);"
+            "CREATE TABLE characters(id INTEGER PRIMARY KEY,guild_id INTEGER,"
+            "user_id INTEGER,name TEXT,class_id TEXT,is_main INTEGER); "
+            "INSERT INTO characters VALUES(42,123,456,'John Stormwind','paladin',1); "
+            "INSERT INTO characters VALUES(43,123,456,'Sam','warrior',0);"
         )
     store = Store(path)
     await store.open()
@@ -436,7 +458,8 @@ async def test_legacy_ambiguous_main_is_never_guessed(tmp_path, flags):
     path = tmp_path / "legacy.sqlite3"
     with closing(sqlite3.connect(path)) as db:
         db.executescript(
-            "CREATE TABLE characters(id INTEGER PRIMARY KEY,guild_id INTEGER,user_id INTEGER,name TEXT,class_id TEXT,is_main INTEGER);"
+            "CREATE TABLE characters(id INTEGER PRIMARY KEY,guild_id INTEGER,"
+            "user_id INTEGER,name TEXT,class_id TEXT,is_main INTEGER);"
         )
         db.executemany(
             "INSERT INTO characters VALUES(?,123,456,?,'paladin',?)",
@@ -454,7 +477,8 @@ async def test_unknown_legacy_schema_rolls_back_without_data_loss(tmp_path):
     path = tmp_path / "unknown.sqlite3"
     with closing(sqlite3.connect(path)) as db:
         db.executescript(
-            "CREATE TABLE characters(id INTEGER PRIMARY KEY,name TEXT); INSERT INTO characters VALUES(7,'Original Name');"
+            "CREATE TABLE characters(id INTEGER PRIMARY KEY,name TEXT); "
+            "INSERT INTO characters VALUES(7,'Original Name');"
         )
     with pytest.raises(StorageError, match="unrecognized"):
         await Store(path).open()
@@ -475,7 +499,10 @@ async def test_duplicate_legacy_names_roll_back_without_guessing(tmp_path):
     path = tmp_path / "duplicates.sqlite3"
     with closing(sqlite3.connect(path)) as db:
         db.executescript(
-            "CREATE TABLE characters(id INTEGER PRIMARY KEY,guild_id INTEGER,user_id INTEGER,name TEXT,class_id TEXT); INSERT INTO characters VALUES(1,123,456,'John','paladin'); INSERT INTO characters VALUES(2,123,456,'john','warrior');"
+            "CREATE TABLE characters(id INTEGER PRIMARY KEY,guild_id INTEGER,"
+            "user_id INTEGER,name TEXT,class_id TEXT); "
+            "INSERT INTO characters VALUES(1,123,456,'John','paladin'); "
+            "INSERT INTO characters VALUES(2,123,456,'john','warrior');"
         )
     with pytest.raises(StorageError, match="duplicate normalized names"):
         await Store(path).open()
@@ -491,7 +518,16 @@ async def test_migration_integrity_failure_rolls_back_without_repairing_data(tmp
     path = tmp_path / "invalid-v2.sqlite3"
     with closing(sqlite3.connect(path)) as db:
         db.executescript(
-            "CREATE TABLE guilds(guild_id INTEGER PRIMARY KEY); CREATE TABLE roles(guild_id INTEGER REFERENCES guilds(guild_id),class_id TEXT,role_id INTEGER,PRIMARY KEY(guild_id,class_id)); CREATE TABLE panels(guild_id INTEGER PRIMARY KEY,channel_id INTEGER,message_id INTEGER); CREATE TABLE metadata(key TEXT PRIMARY KEY,value TEXT); CREATE TABLE retired_panels(guild_id INTEGER,channel_id INTEGER,message_id INTEGER PRIMARY KEY); INSERT INTO roles VALUES(123,'paladin',11); PRAGMA user_version=2;"
+            "CREATE TABLE guilds(guild_id INTEGER PRIMARY KEY); "
+            "CREATE TABLE roles(guild_id INTEGER REFERENCES guilds(guild_id),"
+            "class_id TEXT,role_id INTEGER,PRIMARY KEY(guild_id,class_id)); "
+            "CREATE TABLE panels(guild_id INTEGER PRIMARY KEY,channel_id INTEGER,"
+            "message_id INTEGER); "
+            "CREATE TABLE metadata(key TEXT PRIMARY KEY,value TEXT); "
+            "CREATE TABLE retired_panels(guild_id INTEGER,channel_id INTEGER,"
+            "message_id INTEGER PRIMARY KEY); "
+            "INSERT INTO roles VALUES(123,'paladin',11); "
+            "PRAGMA user_version=2;"
         )
     with pytest.raises(StorageError, match="inconsistent relationships"):
         await Store(path).open()
@@ -500,7 +536,8 @@ async def test_migration_integrity_failure_rolls_back_without_repairing_data(tmp
         assert db.execute("SELECT * FROM roles").fetchall() == [(123, "paladin", 11)]
         assert db.execute("SELECT * FROM guilds").fetchall() == []
         assert not db.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('characters','rosters','character_operations')"
+            "SELECT name FROM sqlite_master WHERE type='table' AND name IN"
+            " ('characters','rosters','character_operations')"
         ).fetchall()
 
 
@@ -526,7 +563,8 @@ async def test_privacy_erase_includes_pending_intent_and_is_scoped(characters, s
     assert (
         await store._run(
             lambda: store.db.execute(
-                "SELECT COUNT(*) FROM rosters WHERE guild_id=123 AND user_id IN (456,888)"
+                "SELECT COUNT(*) FROM rosters WHERE guild_id=123 AND user_id IN"
+                " (456,888)"
             ).fetchone()[0]
         )
         == 0
@@ -537,7 +575,11 @@ async def test_explicit_removal_and_erasure_remove_matching_legacy_archive(tmp_p
     path = tmp_path / "legacy-privacy.sqlite3"
     with closing(sqlite3.connect(path)) as db:
         db.executescript(
-            "CREATE TABLE characters(id INTEGER PRIMARY KEY,guild_id INTEGER,user_id INTEGER,name TEXT,class_id TEXT,is_main INTEGER); INSERT INTO characters VALUES(42,123,456,'John','paladin',1); INSERT INTO characters VALUES(43,123,456,'Sam','warrior',0); INSERT INTO characters VALUES(44,123,789,'Other','warrior',1);"
+            "CREATE TABLE characters(id INTEGER PRIMARY KEY,guild_id INTEGER,"
+            "user_id INTEGER,name TEXT,class_id TEXT,is_main INTEGER); "
+            "INSERT INTO characters VALUES(42,123,456,'John','paladin',1); "
+            "INSERT INTO characters VALUES(43,123,456,'Sam','warrior',0); "
+            "INSERT INTO characters VALUES(44,123,789,'Other','warrior',1);"
         )
     store = Store(path)
     await store.open()

@@ -70,9 +70,12 @@ class FakeRole:
 
 
 def http_error(kind=discord.Forbidden):
-    status = (
-        404 if kind is discord.NotFound else 403 if kind is discord.Forbidden else 500
-    )
+    if kind is discord.NotFound:
+        status = 404
+    elif kind is discord.Forbidden:
+        status = 403
+    else:
+        status = 500
     return kind(
         SimpleNamespace(status=status, reason="test"), "simulated Discord error"
     )
@@ -210,7 +213,10 @@ def interaction(guild, member, channel=None, *, admin=False):
             discord.InteractionResponseType.deferred_message_update
             if not kwargs.get("thinking", False)
             and value.type
-            in (discord.InteractionType.component, discord.InteractionType.modal_submit)
+            in (
+                discord.InteractionType.component,
+                discord.InteractionType.modal_submit,
+            )
             else discord.InteractionResponseType.deferred_channel_message
         )
 

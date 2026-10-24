@@ -418,7 +418,8 @@ async def test_unset_legacy_role_gets_no_tag(character_setup, guild):
     def make_legacy():
         with manager.store.db:
             manager.store.db.execute(
-                "UPDATE characters SET gameplay_role=NULL WHERE guild_id=? AND user_id=?",
+                "UPDATE characters SET gameplay_role=NULL WHERE guild_id=? AND"
+                " user_id=?",
                 (guild.id, member.id),
             )
 

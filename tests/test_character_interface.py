@@ -75,7 +75,10 @@ def character_controller(settings, store, locks):
         ),
         edit=AsyncMock(return_value="Your character was updated."),
         promote=AsyncMock(
-            return_value="Your main is now Sam Ironforge (Warrior). John Stormwind is now an alt."
+            return_value=(
+                "Your main is now Sam Ironforge (Warrior). John Stormwind is now an"
+                " alt."
+            )
         ),
         remove=AsyncMock(return_value="Character removed."),
         purge=AsyncMock(
@@ -191,9 +194,9 @@ async def test_registration_modal_has_names_and_one_combined_class_role_select(
         for option in role["options"]
         if option["value"].startswith("paladin:")
     ] == [
-        ("Paladin · DPS", "paladin:dps", "⚔️"),
-        ("Paladin · Healing", "paladin:healing", "💚"),
-        ("Paladin · Tank", "paladin:tank", "🛡️"),
+        ("Paladin · ⚔️ DPS", "paladin:dps", "🔨"),
+        ("Paladin · 💚 Healing", "paladin:healing", "🔨"),
+        ("Paladin · 🛡️ Tank", "paladin:tank", "🔨"),
     ]
     assert not any(option["default"] for option in role["options"])
     assert all(len(option["description"]) <= 100 for option in role["options"])

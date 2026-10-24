@@ -49,13 +49,15 @@ class CharacterManager:
     def _enabled(self, class_id: str) -> None:
         if class_id not in {entry.id for entry in self.settings.classes}:
             raise UserError(
-                "That character's class is disabled or unknown. Your characters are preserved; edit or choose a main with an enabled class."
+                "That character's class is disabled or unknown. Your characters are"
+                " preserved; edit or choose a main with an enabled class."
             )
 
     def _promotable(self, character: Character) -> None:
         if character.needs_completion:
             raise UserError(
-                "Complete this character's First Name and Secondary Name using Edit Character before selecting it as main. No name has been guessed."
+                "Complete this character's First Name and Secondary Name using Edit"
+                " Character before selecting it as main. No name has been guessed."
             )
         self._enabled(character.class_id)
 
@@ -120,7 +122,10 @@ class CharacterManager:
                 else "Discord is unavailable or denied access."
             )
             raise UserError(
-                f"An interrupted character change still needs recovery. {detail} Ask an officer to check permissions and run {self.settings.command('sync')}, then open My Characters again. Your stored characters and main have been retained."
+                f"An interrupted character change still needs recovery. {detail} Ask an"
+                " officer to check permissions and run"
+                f" {self.settings.command('sync')}, then open My Characters again. Your"
+                " stored characters and main have been retained."
             ) from None
 
     async def _recovery_roles(
@@ -229,22 +234,25 @@ class CharacterManager:
                 raise
             state = await self._compensate_locked(guild, user_id, operation_id)
             if state == "restored":
-                recovery = "Your previous roster and main were kept, and the prior character roles were restored."
+                recovery = (
+                    "Your previous roster and main were kept, and the prior character"
+                    " roles were restored."
+                )
             elif state == "committed":
                 recovery = (
                     "Reopen My Characters to check the recorded result before retrying."
                 )
             else:
-                recovery = "Recovery is pending. Reopen My Characters to reconcile; ask an officer to check role permissions if it cannot recover."
-            detail = (
-                str(error)
-                if isinstance(error, (UserError, StorageError))
-                else (
-                    api_problem(error)
-                    if isinstance(error, discord.HTTPException)
-                    else "The database or Discord request could not be completed."
+                recovery = (
+                    "Recovery is pending. Reopen My Characters to reconcile; ask an"
+                    " officer to check role permissions if it cannot recover."
                 )
-            )
+            if isinstance(error, (UserError, StorageError)):
+                detail = str(error)
+            elif isinstance(error, discord.HTTPException):
+                detail = api_problem(error)
+            else:
+                detail = "The database or Discord request could not be completed."
             raise UserError(
                 f"The character change could not be confirmed. {detail} {recovery}"
             ) from None
@@ -281,7 +289,8 @@ class CharacterManager:
             before = await self.records.roster(guild.id, user_id)
             if before.characters and before.main is None:
                 raise UserError(
-                    "Your imported roster has no confirmed main. Complete a character's names and select it as main before adding more characters."
+                    "Your imported roster has no confirmed main. Complete a character's"
+                    " names and select it as main before adding more characters."
                 )
             self.members.check_cooldown(guild.id, user_id)
             if before.main and before.main.class_id in {
@@ -309,7 +318,8 @@ class CharacterManager:
             )
             full_name = f"{primary} {secondary}"
             return (
-                f"{full_name} has been registered as your main {REGISTRY[class_id].name}."
+                f"{full_name} has been registered as your main"
+                f" {REGISTRY[class_id].name}."
                 if not before.characters
                 else f"{full_name} has been added as a {REGISTRY[class_id].name} alt."
             )
@@ -336,7 +346,11 @@ class CharacterManager:
             demotion = (
                 f" {character_label(before.main)} is now an alt." if before.main else ""
             )
-            return f"Your main is now {character_label(selected)} ({REGISTRY[selected.class_id].name}).{demotion} Your Discord class role and gameplay tag are synchronized."
+            return (
+                f"Your main is now {character_label(selected)}"
+                f" ({REGISTRY[selected.class_id].name}).{demotion} Your Discord class"
+                " role and gameplay tag are synchronized."
+            )
 
     async def edit(
         self,
@@ -362,12 +376,15 @@ class CharacterManager:
                 and selected.updated_at != expected_updated_at
             ):
                 raise UserError(
-                    "This character changed while the edit form was open. Reopen Edit Character to use the latest details; your newer changes were kept."
+                    "This character changed while the edit form was open. Reopen Edit"
+                    " Character to use the latest details; your newer changes were"
+                    " kept."
                 )
             if class_id != selected.class_id:
                 if not self.settings.allow_character_class_edit:
                     raise UserError(
-                        "Character class editing is disabled; you can still edit names and gameplay roles."
+                        "Character class editing is disabled; you can still edit names"
+                        " and gameplay roles."
                     )
                 self._enabled(class_id)
             validate_gameplay_role(class_id, gameplay_role)
@@ -431,12 +448,15 @@ class CharacterManager:
                 else:
                     if not self.settings.allow_clear_selection:
                         raise UserError(
-                            "Removing your last character is disabled for this server. Edit it, add a replacement, or ask an officer to allow an empty roster."
+                            "Removing your last character is disabled for this server."
+                            " Edit it, add a replacement, or ask an officer to allow an"
+                            " empty roster."
                         )
                     plan = await self._role_plan(guild, user_id, None)
             elif replacement_id is not None:
                 raise UserError(
-                    "A replacement main is only needed when removing the current main. Refresh your roster."
+                    "A replacement main is only needed when removing the current main."
+                    " Refresh your roster."
                 )
             elif before.main and before.main.class_id in {
                 entry.id for entry in self.settings.classes
@@ -471,11 +491,15 @@ class CharacterManager:
             or not actor.guild_permissions.manage_roles
         ):
             raise UserError(
-                "You need Manage Server and Manage Roles in this server to erase stored character data."
+                "You need Manage Server and Manage Roles in this server to erase stored"
+                " character data."
             )
         async with self.locks.member(guild.id, target_user_id):
             await self.records.erase(guild.id, target_user_id)
-        return "The member's stored character data and pending recovery records in this server have been deleted. Discord roles were left unchanged."
+        return (
+            "The member's stored character data and pending recovery records in this"
+            " server have been deleted. Discord roles were left unchanged."
+        )
 
     async def guild_roster(
         self,
@@ -497,7 +521,8 @@ class CharacterManager:
             or self.settings.roster_visibility == "disabled"
         ):
             raise UserError(
-                "The guild roster is disabled. You can still privately view your own characters."
+                "The guild roster is disabled. You can still privately view your own"
+                " characters."
             )
         if (
             self.settings.roster_visibility == "admins"

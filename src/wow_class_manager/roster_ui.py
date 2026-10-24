@@ -43,7 +43,8 @@ def require_roster_access(
         and not interaction.permissions.manage_guild
     ):
         raise UserError(
-            "Manage Server is required to view this guild roster. You can still view My Characters."
+            "Manage Server is required to view this guild roster. You can still view My"
+            " Characters."
         )
     return guild
 
@@ -102,18 +103,24 @@ async def show_guild_roster(
     members = len({character.user_id for character in characters})
     lines = [
         f"**Filters:** {class_filter} • {KINDS[kind]} • {member_filter}",
-        f"**{count_label(len(characters), 'character')}** • {count_label(mains, 'main')} • {count_label(alts, 'alt')} • {count_label(members, 'member')}",
+        (
+            f"**{count_label(len(characters), 'character')}** •"
+            f" {count_label(mains, 'main')} • {count_label(alts, 'alt')} •"
+            f" {count_label(members, 'member')}"
+        ),
     ]
     for character in entries:
         designation = "⭐ Main" if character.is_main else "Alt"
         lines.append(
-            f"**{safe_text(character.full_name, 110)}** | {class_name(character.class_id)} | {role_badge(character.gameplay_role)} | {designation}\n"
-            f"Owned by {owner_label(guild, character.user_id)}"
+            f"**{safe_text(character.full_name, 110)}** |"
+            f" {class_name(character.class_id)} | {role_badge(character.gameplay_role)}"
+            f" | {designation}\nOwned by {owner_label(guild, character.user_id)}"
         )
     if not entries:
         lines.append(
-            "No registered characters match these filters. Change a filter or use **Reset Filters** to browse the whole roster. "
-            "Choose **My Characters** to view or register your own characters."
+            "No registered characters match these filters. Change a filter or use"
+            " **Reset Filters** to browse the whole roster. Choose **My Characters** to"
+            " view or register your own characters."
         )
     embed = discord.Embed(
         title=f"Guild {class_filter} Roster" if class_id else "Guild Character Roster",
@@ -121,7 +128,10 @@ async def show_guild_roster(
         colour=class_color(controller.settings, class_id),
     )
     embed.set_footer(
-        text=f"Page {selected_page + 1}/{pages} • {len(characters)} characters • Done closes this menu • Auto-closes after 5 minutes idle"
+        text=(
+            f"Page {selected_page + 1}/{pages} • {len(characters)} characters • Done"
+            " closes this menu • Auto-closes after 5 minutes idle"
+        )
     )
     await controller.send(
         interaction,
@@ -174,6 +184,7 @@ class GuildRosterBrowser(OwnedView):
                     discord.SelectOption(
                         label=entry.definition.name,
                         value=entry.id,
+                        emoji=entry.definition.emoji,
                         default=class_id == entry.id,
                     )
                     for entry in controller.settings.display_classes
