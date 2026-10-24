@@ -145,7 +145,7 @@ async def test_modal_submission_uses_its_source_message_when_available(
     if not from_private_message:
         call.message = None
     await modal.on_submit(call)
-    ui.manager.add.assert_awaited_once_with(guild, 456, "John", "Stormwind", "paladin")
+    ui.manager.add.assert_not_called()
     call.response.defer.assert_awaited_once_with(
         ephemeral=True, thinking=not from_private_message
     )
@@ -159,8 +159,22 @@ async def test_modal_submission_uses_its_source_message_when_available(
         response = call.followup.send.call_args.kwargs
         assert response["ephemeral"]
         assert not old.is_finished()
-    assert "registered as your main Paladin" in response["content"]
-    assert response["view"].character_select.options[0].default
+    assert "Choose a gameplay role" in response["content"]
+    selected = (
+        component(guild) if from_private_message else interaction(guild, call.user)
+    )
+    selected.data = {"values": ["healing"]}
+    await response["view"].selected(selected)
+    ui.manager.add.assert_awaited_once_with(
+        guild, 456, "John", "Stormwind", "paladin", "healing"
+    )
+    saved = (
+        selected.edit_original_response.call_args.kwargs
+        if from_private_message
+        else selected.followup.send.call_args.kwargs
+    )
+    assert "registered as your main Paladin" in saved["content"]
+    assert saved["view"].character_select.options[0].default
 
 
 async def test_selection_only_browses_until_make_main_is_clicked(
@@ -194,8 +208,14 @@ async def test_selection_only_browses_until_make_main_is_clicked(
     ui.manager.remove.assert_not_called()
     response = call.edit_original_response.call_args.kwargs
     assert "John Stormwind is now an alt" in response["content"]
-    assert "Sam Ironforge**\nWarrior • Main" in response["embed"].description
-    assert "John Stormwind**\nPaladin • Alt" in response["embed"].description
+    assert (
+        "Sam Ironforge**\nWarrior • Role not set • Main"
+        in response["embed"].description
+    )
+    assert (
+        "John Stormwind**\nPaladin • Role not set • Alt"
+        in response["embed"].description
+    )
     options = response["view"].character_select.options
     assert [option.value for option in options if option.default] == ["2"]
     assert (

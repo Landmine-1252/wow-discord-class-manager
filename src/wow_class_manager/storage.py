@@ -68,11 +68,15 @@ class Store:
                 self.db.execute("PRAGMA foreign_keys=ON")
                 self.db.execute("PRAGMA journal_mode=WAL")
                 self.db.execute("PRAGMA synchronous=FULL")
-                from .character_store import configure_character_sql, migrate_characters
+                from .character_store import (
+                    configure_character_sql,
+                    migrate_character_roles,
+                    migrate_characters,
+                )
 
                 configure_character_sql(self.db)
                 version = self.db.execute("PRAGMA user_version").fetchone()[0]
-                if version > 3:
+                if version > 4:
                     raise StorageError(
                         "The database schema is newer than this application. Upgrade the image or restore a compatible backup."
                     )
@@ -99,6 +103,9 @@ class Store:
                         self.db.execute("PRAGMA user_version=2")
                     if version < 3:
                         migrate_characters(self.db)
+                        self.db.execute("PRAGMA user_version=3")
+                    if version < 4:
+                        migrate_character_roles(self.db)
                         if self.db.execute("PRAGMA foreign_key_check").fetchone():
                             raise StorageError(
                                 "SQLite migration found inconsistent relationships. The upgrade was rolled back; restore a verified backup or have the existing database repaired before retrying."
@@ -109,7 +116,7 @@ class Store:
                             raise StorageError(
                                 "SQLite migration found database integrity problems. The upgrade was rolled back; restore a verified backup before retrying."
                             )
-                        self.db.execute("PRAGMA user_version=3")
+                        self.db.execute("PRAGMA user_version=4")
             except BaseException:
                 if self._connection is not None:
                     self._connection.close()

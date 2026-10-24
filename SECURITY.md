@@ -29,7 +29,7 @@ Logs redact configured credentials, recognizable tokens and webhook URLs, includ
 
 ## Data retained
 
-SQLite stores guild IDs, Discord member owner IDs, two-part self-reported character names, class IDs, main-character associations, timestamps and minimal recovery journal data, alongside role IDs, panel IDs and command-registration metadata. It contains no Battle.net credentials, game ownership verification, message contents or interaction payloads. Names and ownership are assertions by the Discord member, not verified Blizzard records.
+SQLite stores guild IDs, Discord member owner IDs, two-part self-reported character names, class IDs, gameplay roles, main-character associations, timestamps and minimal recovery journal data, alongside Discord role IDs, panel IDs and command-registration metadata. It contains no Battle.net credentials, game ownership verification, message contents or interaction payloads. Names and ownership are assertions by the Discord member, not verified Blizzard records.
 
 Character edits and management replies are ephemeral and bound to the requesting member and guild. `/roster` displays registered characters only inside the same guild; `ROSTER_VISIBILITY=admins` restricts it to Manage Server holders, and `disabled` or `ENABLE_GUILD_ROSTER=false` disables guild-wide display. Members retain private access to their own roster. Server owners should explain their chosen roster visibility to members.
 

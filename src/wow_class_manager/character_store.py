@@ -10,7 +10,8 @@ from datetime import UTC, datetime
 from typing import Any
 
 from .character_names import normalized_name_key, valid_component
-from .classes import REGISTRY
+from .character_roles import validate_gameplay_role
+from .classes import REGISTRY, supports_gameplay_role
 from .roles import UserError
 from .storage import StorageError, Store
 
@@ -27,6 +28,7 @@ class Character:
     updated_at: str
     is_main: bool
     legacy_name: str | None = None
+    gameplay_role: str | None = None
 
     @property
     def full_name(self) -> str:
@@ -81,6 +83,17 @@ def configure_character_sql(db: sqlite3.Connection) -> None:
     """Register deterministic validation used by CHECK constraints on every open."""
     db.create_function("character_name_key", 2, normalized_name_key, deterministic=True)
     db.create_function("character_name_valid", 1, valid_component, deterministic=True)
+    db.create_function(
+        "character_role_valid", 2, supports_gameplay_role, deterministic=True
+    )
+
+
+def migrate_character_roles(db: sqlite3.Connection) -> None:
+    """Keep existing characters and pending recovery plans; never infer a role."""
+    db.execute(
+        "ALTER TABLE characters ADD COLUMN gameplay_role TEXT "
+        "CHECK(gameplay_role IS NULL OR character_role_valid(class_id, gameplay_role))"
+    )
 
 
 def migrate_characters(db: sqlite3.Connection) -> None:
@@ -211,12 +224,12 @@ class CharacterStore:
 
     def _characters(self, where: str, parameters: tuple[Any, ...]) -> list[Character]:
         rows = self.store.db.execute(
-            "SELECT c.id,c.guild_id,c.user_id,c.primary_name,c.secondary_name,c.class_id,c.created_at,c.updated_at,COALESCE(c.id=r.main_character_id,0),c.legacy_name FROM characters c JOIN rosters r ON r.guild_id=c.guild_id AND r.user_id=c.user_id WHERE "
+            "SELECT c.id,c.guild_id,c.user_id,c.primary_name,c.secondary_name,c.class_id,c.created_at,c.updated_at,COALESCE(c.id=r.main_character_id,0),c.legacy_name,c.gameplay_role FROM characters c JOIN rosters r ON r.guild_id=c.guild_id AND r.user_id=c.user_id WHERE "
             + where
             + " ORDER BY c.id",
             parameters,
         ).fetchall()
-        return [Character(*row[:8], bool(row[8]), row[9]) for row in rows]
+        return [Character(*row[:8], bool(row[8]), row[9], row[10]) for row in rows]
 
     def _roster(self, guild_id: int, user_id: int) -> Roster:
         row = self.store.db.execute(
@@ -324,6 +337,7 @@ class CharacterStore:
                 raise UserError("The character name comparison key is invalid.")
             if payload.get("class_id") not in REGISTRY:
                 raise UserError("That character class is unknown.")
+            validate_gameplay_role(payload["class_id"], payload.get("gameplay_role"))
             if any(
                 normalized_name_key(item.primary_name, item.secondary_name)
                 == payload["name_key"]
@@ -428,7 +442,7 @@ class CharacterStore:
                 now = datetime.now(UTC).isoformat()
                 if kind == "add":
                     cursor = self.store.db.execute(
-                        "INSERT INTO characters(guild_id,user_id,primary_name,secondary_name,name_key,class_id,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)",
+                        "INSERT INTO characters(guild_id,user_id,primary_name,secondary_name,name_key,class_id,gameplay_role,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
                         (
                             guild_id,
                             user_id,
@@ -436,6 +450,7 @@ class CharacterStore:
                             payload["secondary_name"],
                             payload["name_key"],
                             payload["class_id"],
+                            payload["gameplay_role"],
                             now,
                             now,
                         ),
@@ -452,12 +467,13 @@ class CharacterStore:
                     )
                 elif kind == "edit":
                     self.store.db.execute(
-                        "UPDATE characters SET primary_name=?, secondary_name=?, name_key=?, class_id=?, updated_at=? WHERE id=? AND guild_id=? AND user_id=?",
+                        "UPDATE characters SET primary_name=?, secondary_name=?, name_key=?, class_id=?, gameplay_role=?, updated_at=? WHERE id=? AND guild_id=? AND user_id=?",
                         (
                             payload["primary_name"],
                             payload["secondary_name"],
                             payload["name_key"],
                             payload["class_id"],
+                            payload["gameplay_role"],
                             now,
                             payload["character_id"],
                             guild_id,

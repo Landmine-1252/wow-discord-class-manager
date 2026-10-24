@@ -9,8 +9,8 @@ async def test_startup_check_preserves_persisted_state_and_existing_probe_key(st
     await store.set_meta("startup:write-probe", "original value")
     before = await store._run(lambda: list(store.db.iterdump()))
 
-    assert await store.check_health() == 3
-    assert await store.check_health() == 3
+    assert await store.check_health() == 4
+    assert await store.check_health() == 4
 
     assert await store._run(lambda: list(store.db.iterdump())) == before
     assert not store.db.in_transaction
@@ -19,7 +19,7 @@ async def test_startup_check_preserves_persisted_state_and_existing_probe_key(st
 
 
 async def test_startup_check_does_not_leave_probe_data(store):
-    assert await store.check_health() == 3
+    assert await store.check_health() == 4
     assert await store.get_meta("startup:write-probe") is None
 
 
@@ -29,7 +29,7 @@ async def test_startup_check_detects_read_only_database_and_rolls_back(store):
         await store.check_health()
     assert not store.db.in_transaction
     await store._run(lambda: store.db.execute("PRAGMA query_only=OFF"))
-    assert await store.check_health() == 3
+    assert await store.check_health() == 4
 
 
 async def test_startup_check_detects_broken_foreign_keys_without_exposing_data(store):

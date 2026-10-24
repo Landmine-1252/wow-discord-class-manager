@@ -303,8 +303,14 @@ async def test_invalid_form_keeps_draft_and_retries_in_the_same_message(
     fixed = component(guild)
     fixed.type = discord.InteractionType.modal_submit
     await reopened.on_submit(fixed)
-    ui.manager.add.assert_awaited_with(guild, 456, "John", "Stormwind", "paladin")
-    assert fixed.edit_original_response.call_args.kwargs["view"].selected.id == 1
+    picker = fixed.edit_original_response.call_args.kwargs["view"]
+    selected = component(guild)
+    selected.data = {"values": ["healing"]}
+    await picker.selected(selected)
+    ui.manager.add.assert_awaited_with(
+        guild, 456, "John", "Stormwind", "paladin", "healing"
+    )
+    assert selected.edit_original_response.call_args.kwargs["view"].selected.id == 1
     assert retry.is_finished()
 
 
@@ -323,7 +329,11 @@ async def test_new_alt_is_selected_on_its_page_after_registration(
     modal.class_select._values = ["warrior"]
     call = interaction(guild, guild.member())
     await modal.on_submit(call)
-    view = call.followup.send.call_args.kwargs["view"]
+    picker = call.followup.send.call_args.kwargs["view"]
+    selected = interaction(guild, guild.member())
+    selected.data = {"values": ["tank"]}
+    await picker.selected(selected)
+    view = selected.followup.send.call_args.kwargs["view"]
     assert view.page == 1 and view.selected.id == 17
     assert not button(view, "Make Main").disabled
 

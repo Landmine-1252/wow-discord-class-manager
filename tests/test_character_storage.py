@@ -20,6 +20,7 @@ def named(
         "secondary_name": secondary,
         "name_key": normalized_name_key(primary, secondary),
         "class_id": class_id,
+        "gameplay_role": "dps",
         **extra,
     }
 

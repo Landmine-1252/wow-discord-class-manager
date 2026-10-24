@@ -34,8 +34,8 @@ async def assigned(manager, guild, member):
 
 
 async def add_pair(manager, guild, member):
-    await manager.add(guild, member.id, "John", "Stormwind", "paladin")
-    await manager.add(guild, member.id, "Sam", "Ironforge", "warrior")
+    await manager.add(guild, member.id, "John", "Stormwind", "paladin", "dps")
+    await manager.add(guild, member.id, "Sam", "Ironforge", "warrior", "dps")
     roster = await manager.roster(guild, member.id)
     return roster.characters
 
@@ -43,7 +43,7 @@ async def add_pair(manager, guild, member):
 async def test_complete_main_alt_sequence(character_setup, guild):
     manager, member, unrelated = character_setup
     assert (
-        await manager.add(guild, member.id, "John", "Stormwind", "paladin")
+        await manager.add(guild, member.id, "John", "Stormwind", "paladin", "dps")
         == "John Stormwind has been registered as your main Paladin."
     )
     roster = await manager.roster(guild, member.id)
@@ -52,7 +52,7 @@ async def test_complete_main_alt_sequence(character_setup, guild):
     assert john.full_name == "John Stormwind"
     assert await assigned(manager, guild, member) == {"paladin"}
     assert (
-        await manager.add(guild, member.id, "Sam", "Ironforge", "warrior")
+        await manager.add(guild, member.id, "Sam", "Ironforge", "warrior", "dps")
         == "Sam Ironforge has been added as a Warrior alt."
     )
     roster = await manager.roster(guild, member.id)
@@ -68,9 +68,9 @@ async def test_complete_main_alt_sequence(character_setup, guild):
     assert await assigned(manager, guild, member) == {"warrior"}
     await manager.promote(guild, member.id, john.id)
     assert await assigned(manager, guild, member) == {"paladin"}
-    await manager.edit(guild, member.id, sam.id, "Sam", "Ironforge", "hunter")
+    await manager.edit(guild, member.id, sam.id, "Sam", "Ironforge", "hunter", "dps")
     assert await assigned(manager, guild, member) == {"paladin"}
-    await manager.edit(guild, member.id, john.id, "John", "Stormwind", "warrior")
+    await manager.edit(guild, member.id, john.id, "John", "Stormwind", "warrior", "dps")
     roster = await manager.roster(guild, member.id)
     assert roster.main.id == john.id and roster.main.class_id == "warrior"
     assert roster.alts[0].id == sam.id and roster.alts[0].class_id == "hunter"
@@ -83,8 +83,8 @@ async def test_current_main_and_same_class_switch_avoid_role_writes(
     character_setup, guild
 ):
     manager, member, _ = character_setup
-    await manager.add(guild, member.id, "John", "Stormwind", "paladin")
-    await manager.add(guild, member.id, "John", "Ironforge", "paladin")
+    await manager.add(guild, member.id, "John", "Stormwind", "paladin", "dps")
+    await manager.add(guild, member.id, "John", "Ironforge", "paladin", "dps")
     john, alt = (await manager.roster(guild, member.id)).characters
     member.add_roles.reset_mock()
     member.remove_roles.reset_mock()
@@ -101,8 +101,10 @@ async def test_current_main_and_same_class_switch_avoid_role_writes(
 async def test_renaming_preserves_id_and_main(character_setup, guild):
     manager, member, _ = character_setup
     john, sam = await add_pair(manager, guild, member)
-    await manager.edit(guild, member.id, john.id, "John", "Ironforge", "paladin")
-    await manager.edit(guild, member.id, sam.id, "Samuel", "Ironforge", "warrior")
+    await manager.edit(guild, member.id, john.id, "John", "Ironforge", "paladin", "dps")
+    await manager.edit(
+        guild, member.id, sam.id, "Samuel", "Ironforge", "warrior", "dps"
+    )
     roster = await manager.roster(guild, member.id)
     assert roster.main.id == john.id and roster.main.full_name == "John Ironforge"
     assert roster.alts[0].id == sam.id and roster.alts[0].primary_name == "Samuel"
@@ -121,6 +123,7 @@ async def test_edit_accepts_current_version_and_preserves_newer_details_on_retry
             "Jonathan",
             "Ironforge",
             "mage",
+            "dps",
             expected_updated_at=john.updated_at,
         )
         == "Jonathan Ironforge has been updated."
@@ -137,6 +140,7 @@ async def test_edit_accepts_current_version_and_preserves_newer_details_on_retry
             "John",
             "Stormwind",
             "paladin",
+            "dps",
             expected_updated_at=john.updated_at,
         )
     assert await manager.records.character(guild.id, member.id, john.id) == fresh
@@ -161,6 +165,7 @@ async def test_concurrent_edits_with_same_version_only_commit_once(
             "Jonathan",
             "Ironforge",
             "mage",
+            "dps",
             expected_updated_at=john.updated_at,
         ),
         manager.edit(
@@ -170,6 +175,7 @@ async def test_concurrent_edits_with_same_version_only_commit_once(
             "Johnny",
             "Stormwind",
             "warrior",
+            "dps",
             expected_updated_at=john.updated_at,
         ),
         return_exceptions=True,
@@ -185,12 +191,14 @@ async def test_multiple_alts_unlimited_and_case_insensitive_duplicate(
 ):
     manager, member, _ = character_setup
     await add_pair(manager, guild, member)
-    await manager.add(guild, member.id, "John", "Ironforge", "mage")
+    await manager.add(guild, member.id, "John", "Ironforge", "mage", "dps")
     with pytest.raises(UserError, match="full name already exists"):
-        await manager.add(guild, member.id, "john", "stormwind", "warlock")
+        await manager.add(guild, member.id, "john", "stormwind", "warlock", "dps")
     for index in range(30):
         suffix = chr(ord("A") + index // 26) + chr(ord("a") + index % 26)
-        await manager.add(guild, member.id, "Alt" + suffix, "Stormwind", "warrior")
+        await manager.add(
+            guild, member.id, "Alt" + suffix, "Stormwind", "warrior", "dps"
+        )
     roster = await manager.roster(guild, member.id)
     assert len(roster.characters) == 33 and len(roster.alts) == 32
     assert await assigned(manager, guild, member) == {"paladin"}
@@ -256,7 +264,7 @@ async def test_disabled_class_is_retained_until_explicit_valid_main(
     roster = await manager.roster(guild, member.id)
     assert len(roster.characters) == 2 and roster.main.id == sam.id
     assert await assigned(manager, guild, member) == {"warrior"}
-    await manager.edit(guild, member.id, john.id, "John", "Ironforge", "paladin")
+    await manager.edit(guild, member.id, john.id, "John", "Ironforge", "paladin", "dps")
 
 
 async def test_missing_or_duplicate_role_repaired_on_interaction(
@@ -409,7 +417,7 @@ async def test_failed_first_registration_preserves_legacy_class(
         AsyncMock(side_effect=StorageError("Simulated write failure")),
     )
     with pytest.raises(UserError):
-        await manager.add(guild, member.id, "John", "Stormwind", "paladin")
+        await manager.add(guild, member.id, "John", "Stormwind", "paladin", "dps")
     assert not (await manager.roster(guild, member.id)).characters
     assert await assigned(manager, guild, member) == {"mage"}
 
@@ -446,7 +454,7 @@ async def test_owner_and_guild_isolation(
     other_guild = FakeGuild(456)
     await RoleManager(settings, store, locks).reconcile(other_guild)
     same_user = other_guild.member(member.id)
-    await manager.add(other_guild, same_user.id, "John", "Stormwind", "mage")
+    await manager.add(other_guild, same_user.id, "John", "Stormwind", "mage", "dps")
     assert await assigned(manager, guild, member) == {"paladin"}
     assert await assigned(manager, other_guild, same_user) == {"mage"}
     with pytest.raises(UserError, match="not in your roster"):
@@ -481,10 +489,12 @@ async def test_class_edits_and_limits_enforced(
         restricted, store, locks, MemberManager(restricted, store, locks)
     )
     with pytest.raises(UserError, match="editing is disabled"):
-        await manager.edit(guild, member.id, john.id, "John", "Ironforge", "warrior")
-    await manager.edit(guild, member.id, john.id, "John", "Ironforge", "paladin")
+        await manager.edit(
+            guild, member.id, john.id, "John", "Ironforge", "warrior", "dps"
+        )
+    await manager.edit(guild, member.id, john.id, "John", "Ironforge", "paladin", "dps")
     with pytest.raises(UserError, match="limit of 2"):
-        await manager.add(guild, member.id, "Another", "Stormwind", "mage")
+        await manager.add(guild, member.id, "Another", "Stormwind", "mage", "dps")
 
 
 async def test_admin_erasure_preserves_roles_and_other_users(character_setup, guild):
@@ -493,7 +503,7 @@ async def test_admin_erasure_preserves_roles_and_other_users(character_setup, gu
     admin = guild.member(999)
     admin.guild_permissions = discord.Permissions(manage_guild=True, manage_roles=True)
     member.guild_permissions = discord.Permissions.none()
-    await manager.add(guild, admin.id, "Other", "Player", "mage")
+    await manager.add(guild, admin.id, "Other", "Player", "mage", "dps")
     with pytest.raises(UserError, match="Manage Server"):
         await manager.purge(guild, member, admin.id)
     guild.members.pop(member.id)
@@ -542,7 +552,7 @@ async def test_allowlist_blocks_all_character_work(
         restricted, store, locks, MemberManager(restricted, store, locks)
     )
     for call in (
-        manager.add(guild, member.id, "John", "Stormwind", "paladin"),
+        manager.add(guild, member.id, "John", "Stormwind", "paladin", "dps"),
         manager.roster(guild, member.id),
         manager.promote(guild, member.id, 1),
     ):
@@ -561,6 +571,7 @@ async def test_crashed_first_registration_has_no_invented_character(
         "secondary_name": "Stormwind",
         "name_key": normalized_name_key("John", "Stormwind"),
         "class_id": "paladin",
+        "gameplay_role": "dps",
         "max_characters": 0,
     }
     await manager.records.prepare(
@@ -583,7 +594,7 @@ async def test_first_registration_recovery_remaps_deleted_legacy_role(
     )
     monkeypatch.setattr(manager.members, "_restore", AsyncMock(return_value=False))
     with pytest.raises(UserError, match="Recovery is pending"):
-        await manager.add(guild, member.id, "John", "Stormwind", "paladin")
+        await manager.add(guild, member.id, "John", "Stormwind", "paladin", "dps")
     pending = await manager.records.pending(guild.id, member.id)
     mapping = await store.roles(guild.id)
     old_role = mapping["mage"]
@@ -598,7 +609,7 @@ async def test_first_registration_recovery_remaps_deleted_legacy_role(
     assert await assigned(manager, guild, member) == {"mage"}
     assert unrelated in member.roles
     assert await manager.records.pending(guild.id, member.id) is None
-    await manager.add(guild, member.id, "John", "Stormwind", "paladin")
+    await manager.add(guild, member.id, "John", "Stormwind", "paladin", "dps")
     assert (await manager.roster(guild, member.id)).main.full_name == "John Stormwind"
 
 

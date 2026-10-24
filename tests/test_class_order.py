@@ -112,7 +112,9 @@ async def test_edit_disabled_main_preserves_record_and_only_changes_class_if_sel
     original = ClassBot(settings, store, Redactor())
     await original.roles.reconcile(guild)
     member = guild.member()
-    await original.characters.add(guild, member.id, "John", "Stormwind", "paladin")
+    await original.characters.add(
+        guild, member.id, "John", "Stormwind", "paladin", "healing"
+    )
     saved = (await original.characters.records.roster(guild.id, member.id)).main
     restricted = replace(
         settings,
@@ -130,13 +132,18 @@ async def test_edit_disabled_main_preserves_record_and_only_changes_class_if_sel
         modal.class_select._values = [selection] if selection else []
         call = interaction(guild, member)
         await modal.on_submit(call)
+        picker = call.followup.send.call_args.kwargs["view"]
+        selected = interaction(guild, member)
+        selected.data = {"values": ["dps" if selection else "tank"]}
+        await picker.selected(selected)
         result = await current.characters.records.roster(guild.id, member.id)
         assert result.main.id == saved.id
         assert result.main.full_name == "John Ironforge"
         assert result.main.class_id == (selection or "paladin")
+        assert result.main.gameplay_role == ("dps" if selection else "tank")
         mapping = await store.roles(guild.id)
         assert {role.id for role in member.roles} == {mapping[selection or "paladin"]}
-        assert "has been updated" in call.followup.send.call_args.kwargs["content"]
+        assert "has been updated" in selected.followup.send.call_args.kwargs["content"]
         if selection is None:
             member.add_roles.assert_not_awaited()
             member.remove_roles.assert_not_awaited()

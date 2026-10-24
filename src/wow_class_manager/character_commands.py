@@ -5,6 +5,7 @@ from __future__ import annotations
 import discord
 from discord import app_commands
 
+from .character_roles import role_name
 from .character_ui import CharacterController, class_name, safe_text
 
 
@@ -17,7 +18,8 @@ def build_character_commands(controller: CharacterController) -> app_commands.Gr
     )
 
     @group.command(
-        name="add", description="Register a character with two name parts and a class"
+        name="add",
+        description="Register a character with a name, class and gameplay role",
     )
     async def add(interaction: discord.Interaction) -> None:
         await controller.add(interaction)
@@ -41,7 +43,7 @@ def build_character_commands(controller: CharacterController) -> app_commands.Gr
         await controller.choose(interaction, "main", selected=character)
 
     @group.command(
-        name="edit", description="Edit a character's two name parts or class"
+        name="edit", description="Edit a character's name, class or gameplay role"
     )
     @app_commands.describe(
         character="Choose one of your registered characters, or open the selection menu"
@@ -94,7 +96,7 @@ def build_character_commands(controller: CharacterController) -> app_commands.Gr
             ]
             return [
                 app_commands.Choice(
-                    name=f"{safe_text(entry.full_name, 65)} | {class_name(entry.class_id)} | {'Main' if entry.is_main else 'Alt'}"[
+                    name=f"{safe_text(entry.full_name, 55)} | {class_name(entry.class_id)} | {role_name(entry.gameplay_role)} | {'Main' if entry.is_main else 'Alt'}"[
                         :100
                     ],
                     value=str(entry.id),

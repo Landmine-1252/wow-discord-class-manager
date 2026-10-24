@@ -12,6 +12,7 @@ from uuid import uuid4
 import discord
 
 from .character_names import validate_names
+from .character_roles import validate_gameplay_role
 from .character_store import Character, CharacterStore, Operation, Roster
 from .classes import REGISTRY
 from .config import Settings
@@ -234,9 +235,11 @@ class CharacterManager:
         primary_name: str,
         secondary_name: str,
         class_id: str,
+        gameplay_role: str,
     ) -> str:
         self._require(guild)
         self._enabled(class_id)
+        validate_gameplay_role(class_id, gameplay_role)
         primary, secondary, key = validate_names(
             self.settings, primary_name, secondary_name
         )
@@ -266,6 +269,7 @@ class CharacterManager:
                     "secondary_name": secondary,
                     "name_key": key,
                     "class_id": class_id,
+                    "gameplay_role": gameplay_role,
                     "max_characters": self.settings.max_characters_per_user,
                 },
                 plan,
@@ -307,6 +311,7 @@ class CharacterManager:
         primary_name: str,
         secondary_name: str,
         class_id: str,
+        gameplay_role: str,
         *,
         expected_updated_at: str | None = None,
     ) -> str:
@@ -327,9 +332,10 @@ class CharacterManager:
             if class_id != selected.class_id:
                 if not self.settings.allow_character_class_edit:
                     raise UserError(
-                        "Character class editing is disabled; you can still edit both name fields."
+                        "Character class editing is disabled; you can still edit names and gameplay roles."
                     )
                 self._enabled(class_id)
+            validate_gameplay_role(class_id, gameplay_role)
             self.members.check_cooldown(guild.id, user_id)
             before = await self.records.roster(guild.id, user_id)
             plan = None
@@ -351,6 +357,7 @@ class CharacterManager:
                     "secondary_name": secondary,
                     "name_key": key,
                     "class_id": class_id,
+                    "gameplay_role": gameplay_role,
                 },
                 plan,
             )

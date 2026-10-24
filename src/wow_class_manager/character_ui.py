@@ -14,8 +14,9 @@ from weakref import WeakValueDictionary
 import aiohttp
 import discord
 
-from .character_names import normalized_name_key
-from .classes import REGISTRY
+from .character_names import normalized_name_key, validate_names
+from .character_roles import role_name, validate_gameplay_role
+from .classes import GAMEPLAY_ROLES, REGISTRY
 from .roles import UserError, require_bot_member, require_guild
 from .storage import StorageError
 
@@ -66,7 +67,7 @@ def character_options(
             value=str(entry.id),
             default=default_main and entry.is_main,
             description=(
-                f"{class_name(entry.class_id)} | {'Current Main' if entry.is_main else 'Alt'}"
+                f"{class_name(entry.class_id)} | {role_name(entry.gameplay_role)} | {'Current Main' if entry.is_main else 'Alt'}"
                 + (" | Complete name first" if entry.needs_completion else "")
                 + (
                     " | " + safe_text(entry.secondary_name, 50)
@@ -441,11 +442,11 @@ class CharacterController:
             designation = "Main" if character.is_main else "Alt"
             completion = " • Name incomplete" if character.needs_completion else ""
             lines.append(
-                f"**{safe_text(character.full_name, 110)}**\n{class_name(character.class_id)} • {designation}{completion}"
+                f"**{safe_text(character.full_name, 110)}**\n{class_name(character.class_id)} • {role_name(character.gameplay_role)} • {designation}{completion}"
             )
         if not entries:
             lines.append(
-                "Start with Add Character below. Enter both name parts and choose a class. Your first character becomes your main and sets your class role. You can add alts or change your plans later."
+                "Start with Add Character below. Enter both name parts, choose a class, then choose a gameplay role to save. Your first character becomes your main and sets your class role. You can add alts or change your plans later."
             )
         elif roster.main is None:
             lines.append(
@@ -466,7 +467,11 @@ class CharacterController:
             text=f"Page {page + 1}/{pages} • {len(ordered)} character{'s' if len(ordered) != 1 else ''} • Closes after 5 minutes idle"
         )
         if selected:
-            detail = f"{safe_text(selected.full_name, 110)} • {class_name(selected.class_id)} • {'Main' if selected.is_main else 'Alt'}"
+            detail = f"{safe_text(selected.full_name, 110)} • {class_name(selected.class_id)} • {role_name(selected.gameplay_role)} • {'Main' if selected.is_main else 'Alt'}"
+            if selected.gameplay_role is None:
+                detail += (
+                    "\nUse Edit to choose DPS, Healing or Tank for this character."
+                )
             if (
                 selected.is_main
                 and len(ordered) == 1
@@ -485,7 +490,7 @@ class CharacterController:
         if roster.main is not None and page > 0:
             embed.add_field(
                 name="Current Main",
-                value=f"{safe_text(roster.main.full_name, 110)} • {class_name(roster.main.class_id)}",
+                value=f"{safe_text(roster.main.full_name, 110)} • {class_name(roster.main.class_id)} • {role_name(roster.main.gameplay_role)}",
                 inline=False,
             )
         await self.send(
@@ -512,6 +517,31 @@ class CharacterController:
             )
 
         await self.execute(interaction, show, defer=False)
+
+    async def retry_character(
+        self,
+        interaction: discord.Interaction,
+        error: UserError,
+        character: Character | None,
+        draft: tuple[str, str, str],
+    ) -> None:
+        async def retry(message: str) -> None:
+            await self.send(
+                interaction,
+                content=message
+                + "\n\nYour entries are kept below. Choose Edit Details to try again, or Back to Characters to review your roster.",
+                view=RetryCharacterView(
+                    self, interaction.guild_id, interaction.user.id, character, draft
+                ),
+            )
+
+        await self.controller.handle_error(
+            interaction,
+            error,
+            action="character",
+            operation="save",
+            respond_with=retry,
+        )
 
     async def choose(
         self,
@@ -653,7 +683,7 @@ class CharacterController:
             root = self.settings.character_command_root
             await self.send(
                 interaction,
-                content=f"Open My Characters to add a character or select one to Edit, Make Main or Remove. Enter a First Name, Secondary Name and class when adding. Your first character becomes main; later characters become alts.\n`/{root} main` switches mains and automatically makes the previous main an alt. Only your main sets your Discord class role.\n`/{root} list`, `/{root} edit` and `/{root} remove` also open private workflows. Removal always asks for confirmation.\nDone closes your menu; inactive menus close after five minutes. Names and ownership are self-reported; registration does not verify game availability or ownership.",
+                content=f"Open My Characters to add a character or select one to Edit, Make Main or Remove. Enter a First Name, Secondary Name and class, then choose a gameplay role to save. Only roles supported by that class are offered: DPS, Healing or Tank. Your first character becomes main; later characters become alts.\n`/{root} main` switches mains and automatically makes the previous main an alt. Only your main sets your Discord class role. Gameplay roles appear on your characters and in the community roster. Use Edit to change a role or complete an older character's role.\n`/{root} list`, `/{root} edit` and `/{root} remove` also open private workflows. Removal always asks for confirmation.\nDone closes your menu; inactive menus close after five minutes. Names and ownership are self-reported; registration does not verify game availability or ownership.",
                 view=BackView(self, guild.id, interaction.user.id),
             )
 
@@ -1144,63 +1174,55 @@ class CharacterModal(discord.ui.Modal):
             )
         )
 
-        async def save(guild: discord.Guild) -> None:
+        async def choose_role(guild: discord.Guild) -> None:
             if self.source_view is not None and self.source_view.is_finished():
                 raise UserError(
                     "This menu has closed or changed. Reopen My Characters to try again."
                 )
             try:
-                if self.character:
-                    text = await self.controller.manager.edit(
-                        guild,
-                        self.owner_id,
-                        self.character.id,
-                        primary,
-                        secondary,
-                        class_id,
-                        expected_updated_at=self.character.updated_at,
-                    )
-                else:
-                    text = await self.controller.manager.add(
-                        guild, self.owner_id, primary, secondary, class_id
-                    )
+                validate_names(self.controller.settings, primary, secondary)
+                if class_id not in REGISTRY:
+                    raise UserError("Choose a recognized character class.")
+                if self.character is None or class_id != self.character.class_id:
+                    if (
+                        self.character is not None
+                        and not self.controller.settings.allow_character_class_edit
+                    ):
+                        raise UserError("Character class editing is disabled.")
+                    if class_id not in {
+                        entry.id for entry in self.controller.settings.classes
+                    }:
+                        raise UserError("Choose an enabled character class.")
+                view = CharacterRolePicker(
+                    self.controller,
+                    guild.id,
+                    self.owner_id,
+                    self.character,
+                    (primary, secondary, class_id),
+                )
+                current = (
+                    f"\nCurrent role: {role_name(self.character.gameplay_role)}."
+                    if self.character
+                    else ""
+                )
+                await self.controller.send(
+                    interaction,
+                    content=(
+                        f"**{safe_text(primary + ' ' + secondary, 110)}** • {class_name(class_id)}{current}\n"
+                        "Choose a gameplay role below to save this character. Only roles supported by this class are shown."
+                    ),
+                    view=view,
+                )
             except UserError as error:
-
-                async def retry(message: str) -> None:
-                    await self.controller.send(
-                        interaction,
-                        content=message
-                        + "\n\nYour entries are kept below. Choose Edit Details to try again, or Back to Characters to review your roster.",
-                        view=RetryCharacterView(
-                            self.controller,
-                            guild.id,
-                            self.owner_id,
-                            self.character,
-                            (primary, secondary, class_id),
-                        ),
-                    )
-
-                # execute still holds the session lock: a failed form cannot
-                # repaint a newer navigation result while showing its retry.
-                await self.controller.controller.handle_error(
+                await self.controller.retry_character(
                     interaction,
                     error,
-                    action="character",
-                    operation="save",
-                    respond_with=retry,
+                    self.character,
+                    (primary, secondary, class_id),
                 )
-                return
-            await self.controller.after_change(
-                interaction,
-                text,
-                selected_id=self.character.id if self.character else None,
-                selected_name_key=(
-                    None if self.character else normalized_name_key(primary, secondary)
-                ),
-            )
 
         await self.controller.execute(
-            interaction, save, owner_id=self.owner_id, guild_id=self.guild_id
+            interaction, choose_role, owner_id=self.owner_id, guild_id=self.guild_id
         )
 
     async def on_error(
@@ -1239,6 +1261,79 @@ class RetryCharacterView(OwnedView):
             )
 
         await self.run(interaction, show, defer=False)
+
+
+class CharacterRolePicker(RetryCharacterView):
+    """Choose only compatible roles after the modal has established the class."""
+
+    def __init__(
+        self,
+        controller: CharacterController,
+        guild_id: int,
+        owner_id: int,
+        character: Character | None,
+        draft: tuple[str, str, str],
+    ):
+        super().__init__(controller, guild_id, owner_id, character, draft)
+        self.select = discord.ui.Select(
+            custom_id="wow:character:gameplay-role:v1",
+            placeholder="Choose a role to save this character",
+            options=[
+                discord.SelectOption(label=GAMEPLAY_ROLES[role], value=role)
+                for role in REGISTRY[draft[2]].gameplay_roles
+            ],
+            row=1,
+        )
+        self.select.callback = self.selected
+        self.add_item(self.select)
+
+    async def selected(self, interaction: discord.Interaction) -> None:
+        async def save(guild: discord.Guild) -> None:
+            if self.is_finished():
+                raise UserError(
+                    "This menu has closed or changed. Reopen My Characters."
+                )
+            primary, secondary, class_id = self.draft
+            values = (interaction.data or {}).get("values", [])
+            gameplay_role = values[0] if len(values) == 1 else None
+            try:
+                validate_gameplay_role(class_id, gameplay_role)
+                if self.character:
+                    notice = await self.controller.manager.edit(
+                        guild,
+                        self.owner_id,
+                        self.character.id,
+                        primary,
+                        secondary,
+                        class_id,
+                        gameplay_role,
+                        expected_updated_at=self.character.updated_at,
+                    )
+                else:
+                    notice = await self.controller.manager.add(
+                        guild,
+                        self.owner_id,
+                        primary,
+                        secondary,
+                        class_id,
+                        gameplay_role,
+                    )
+            except UserError as error:
+                await self.controller.retry_character(
+                    interaction, error, self.character, self.draft
+                )
+                return
+            self.stop()
+            await self.controller.after_change(
+                interaction,
+                notice,
+                selected_id=self.character.id if self.character else None,
+                selected_name_key=(
+                    None if self.character else normalized_name_key(primary, secondary)
+                ),
+            )
+
+        await self.run(interaction, save)
 
 
 class EditLauncher(OwnedView):
@@ -1409,9 +1504,15 @@ class RemovalConfirmation(OwnedView):
                     guild, self.owner_id, reconcile=False
                 )
                 current = self.controller.owned(roster, self.character.id)
-                if (current.full_name, current.class_id, current.is_main) != (
+                if (
+                    current.full_name,
+                    current.class_id,
+                    current.gameplay_role,
+                    current.is_main,
+                ) != (
                     self.character.full_name,
                     self.character.class_id,
+                    self.character.gameplay_role,
                     self.character.is_main,
                 ):
                     raise UserError(

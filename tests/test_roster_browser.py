@@ -23,6 +23,7 @@ def character(number, *, main=False, user_id=456):
         guild_id=123,
         full_name=f"John Stormwind{number}",
         class_id="paladin",
+        gameplay_role=None,
         is_main=main,
     )
 
@@ -466,8 +467,8 @@ async def test_all_classes_keeps_saved_disabled_characters_visible(
     call = interaction(guild, guild.member())
     await browser_controller.guild_roster(call)
     sent = browser_controller.send.call_args.kwargs
-    assert "Monk | Main" in sent["embed"].description
-    assert "Death Knight | Alt" in sent["embed"].description
+    assert "Monk | Role not set | Main" in sent["embed"].description
+    assert "Death Knight | Role not set | Alt" in sent["embed"].description
     assert [entry.class_id for entry in saved] == ["monk", "death_knight"]
     assert "monk" not in {option.value for option in sent["view"].class_filter.options}
     browser_controller.manager.guild_roster.assert_awaited_once_with(

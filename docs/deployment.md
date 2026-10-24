@@ -130,14 +130,16 @@ For local builds, fetch the selected source revision and use the build override.
 
 ## Upgrading an existing class-only installation
 
-The character release upgrades the existing database to **schema version 3** automatically. Keep the same application/token, `DATABASE_PATH`, Compose project name and `/data` volume. No manual SQL, new container service or new network port is needed.
+The current character release upgrades the existing database to **schema version 4** automatically. Keep the same application/token, `DATABASE_PATH`, Compose project name and `/data` volume. No manual SQL, new container service or new network port is needed.
+
+Upgrades from version 3 add a nullable gameplay role while preserving character IDs, names, classes, main pointers and pending recovery journals. Existing characters display **Role not set** until their owner uses Edit and chooses a supported role. New registrations and edits require DPS, Healing or Tank as supported by the class. Personal and community rosters display the selection; Discord class-role mappings remain intact.
 
 1. Stop the bot and take the consistent backup described below. Retain the old image version/digest alongside that backup.
 2. Review the new settings in `.env.example`. Character management defaults to enabled, with unlimited characters and a member-visible guild roster. Choose `ROSTER_VISIBILITY=admins` or `disabled` if preferred before starting.
 3. Keep your existing token and role overrides. Set `CHARACTER_PANEL_TITLE` for the new title. An old explicitly configured `PANEL_DESCRIPTION` is preserved; update it or remove the override to get the new character description.
 4. Pull the chosen release and recreate the existing service, or use the normal local build override. Startup adds character, roster and recovery-journal tables without deleting guilds, role mappings or saved panel IDs.
 5. Check health/logs and `/class status`, then open the **existing** public message. Its controls update in place to My Characters. Run `/class setup` only if it needs repair; no duplicate panel is needed.
-6. Test John Stormwind as a main Paladin, Sam Ironforge as a Warrior alt, and switching between them. Confirm unrelated roles remain and both records survive a container restart.
+6. Test John Stormwind as a main Healing Paladin, Sam Ironforge as a Tank Warrior alt, and switching between them. Confirm unrelated Discord roles remain and both characters and gameplay roles survive a container restart. Verify that a Priest cannot choose Tank and a Hunter only offers DPS.
 
 Original class-only installations have no character names to migrate. Existing colored roles remain intact, and users register their real characters when ready. No fabricated character or automatic whole-server member scan occurs. The same Discord user can have independent rosters in different guilds.
 
@@ -145,7 +147,7 @@ For a recognized older custom character table with `id`, `guild_id`, `user_id`, 
 
 After an interrupted main switch, the next private character interaction reconciles the durable pending operation and the prior committed main. If permissions or connectivity still prevent recovery, the bot explains the problem and retains the roster and journal for retry. Do not clear recovery rows manually. Members who leave and rejoin retain their stored characters; their roles are reconciled when they use character management again.
 
-To temporarily return to class-only behavior without rolling back the database, set `ENABLE_CHARACTER_MANAGEMENT=false` and recreate the container. Records remain intact, while legacy class selection becomes available. Re-enabling restores the stored main as the authoritative class when the member interacts. To run an older application image that only understands schema 2, restore the **matching pre-upgrade backup** as well; disabling a feature does not downgrade its schema.
+To temporarily return to class-only behavior without rolling back the database, set `ENABLE_CHARACTER_MANAGEMENT=false` and recreate the container. Records remain intact, while legacy class selection becomes available. Re-enabling restores the stored main as the authoritative class when the member interacts. To run an older application image that only understands schema 2 or 3, restore the **matching pre-upgrade backup** as well; disabling a feature does not downgrade its schema.
 
 ## Backup and restore
 

@@ -20,6 +20,7 @@ from wow_class_manager.character_ui import (
     CharacterController,
     CharacterModal,
     CharacterPicker,
+    CharacterRolePicker,
     CharacterView,
     PurgeConfirmation,
     RemovalConfirmation,
@@ -40,6 +41,7 @@ def character(
     primary="John",
     secondary="Stormwind",
     class_id="paladin",
+    gameplay_role=None,
     main=False,
     incomplete=False,
 ):
@@ -51,6 +53,7 @@ def character(
         secondary_name=secondary,
         full_name=f"{primary} {secondary}".strip(),
         class_id=class_id,
+        gameplay_role=gameplay_role,
         is_main=main,
         needs_completion=incomplete,
         updated_at="2026-10-23T00:00:00+00:00",
@@ -191,8 +194,14 @@ async def test_modal_registration_defers_and_confirms_privately(
     modal.class_select._values = ["paladin"]
     call = interaction(guild, guild.member())
     await modal.on_submit(call)
+    picker = call.followup.send.call_args.kwargs["view"]
+    assert isinstance(picker, CharacterRolePicker)
+    character_controller.manager.add.assert_not_called()
+    selected = interaction(guild, guild.member())
+    selected.data = {"values": ["healing"]}
+    await picker.selected(selected)
     character_controller.manager.add.assert_awaited_once_with(
-        guild, 456, "John", "Stormwind", "paladin"
+        guild, 456, "John", "Stormwind", "paladin", "healing"
     )
     call.response.defer.assert_awaited_once_with(ephemeral=True, thinking=True)
     assert call.followup.send.call_args.kwargs["ephemeral"]
@@ -227,6 +236,10 @@ async def test_edit_modal_preserves_id_and_both_independent_fields(
     modal.class_select._values = ["paladin"]
     call = interaction(guild, guild.member())
     await modal.on_submit(call)
+    picker = call.followup.send.call_args.kwargs["view"]
+    selected = interaction(guild, guild.member())
+    selected.data = {"values": ["tank"]}
+    await picker.selected(selected)
     character_controller.manager.edit.assert_awaited_once_with(
         guild,
         456,
@@ -234,6 +247,7 @@ async def test_edit_modal_preserves_id_and_both_independent_fields(
         "John",
         "Ironforge",
         "paladin",
+        "tank",
         expected_updated_at=existing.updated_at,
     )
     character_controller.manager.add.assert_not_called()
@@ -291,7 +305,12 @@ async def test_disabled_class_can_be_kept_for_rename_without_being_a_choice(
     assert modal.class_select.min_values == 0
     modal.primary._value, modal.secondary._value = "John", "Ironforge"
     modal.class_select._values = []
-    await modal.on_submit(interaction(guild, guild.member()))
+    call = interaction(guild, guild.member())
+    await modal.on_submit(call)
+    picker = call.followup.send.call_args.kwargs["view"]
+    selected = interaction(guild, guild.member())
+    selected.data = {"values": ["healing"]}
+    await picker.selected(selected)
     character_controller.manager.edit.assert_awaited_once_with(
         guild,
         456,
@@ -299,6 +318,7 @@ async def test_disabled_class_can_be_kept_for_rename_without_being_a_choice(
         "John",
         "Ironforge",
         "evoker",
+        "healing",
         expected_updated_at=old.updated_at,
     )
     new_modal = CharacterModal(character_controller, 123, 456)
@@ -608,7 +628,11 @@ async def test_modal_to_main_switch_to_replacement_removal_with_real_storage(
         modal.class_select._values = [class_id]
         call = interaction(guild, member)
         await modal.on_submit(call)
-        return call.followup.send.call_args.kwargs["content"]
+        picker = call.followup.send.call_args.kwargs["view"]
+        selected = interaction(guild, member)
+        selected.data = {"values": ["tank"]}
+        await picker.selected(selected)
+        return selected.followup.send.call_args.kwargs["content"]
 
     assert "registered as your main Paladin" in await register(
         "John", "Stormwind", "paladin"
@@ -616,6 +640,7 @@ async def test_modal_to_main_switch_to_replacement_removal_with_real_storage(
     assert "Warrior alt" in await register("Sam", "Ironforge", "warrior")
     saved = await bot.characters.roster(guild, member.id, reconcile=False)
     john, sam = saved.characters
+    assert john.gameplay_role == sam.gameplay_role == "tank"
     assert (john.primary_name, john.secondary_name, john.is_main) == (
         "John",
         "Stormwind",

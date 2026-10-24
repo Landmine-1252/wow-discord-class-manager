@@ -2,7 +2,7 @@
 
 # WoW Discord Class Manager
 
-A small, self-hosted Discord bot that helps a World of Warcraft: Forever community share the characters its members plan to play. Members register a two-part character name and class, keep any number of alts, and choose one main. Plans can change: the bot safely updates each member's Discord class role when they choose a different main.
+A small, self-hosted Discord bot that helps a World of Warcraft: Forever community share the characters its members plan to play. Members register a two-part character name, class and gameplay role, keep any number of alts, and choose one main. Plans can change: the bot safely updates each member's Discord class role when they choose a different main.
 
 **Create a Discord application → Configure the token → Start the container → Invite the bot → Run `/class setup` → Done.** Inviting the bot before starting the container works too.
 
@@ -10,13 +10,24 @@ A small, self-hosted Discord bot that helps a World of Warcraft: Forever communi
 
 One public message titled **World of Warcraft Character Manager**, with **My Characters** and, when enabled, **Community Roster** buttons. Character management and roster browsing open private views; the public panel stays unchanged.
 
-1. Choose **My Characters → Add Character**, select Paladin, and enter **First Name: John** and **Secondary Name: Stormwind** in separate fields. **John Stormwind** automatically becomes your first main and receives the Paladin role.
-2. Add **Sam Ironforge** as Warrior. Sam becomes an alt, John remains main, and your role stays Paladin.
+1. Choose **My Characters → Add Character**, select Paladin, and enter **First Name: John** and **Secondary Name: Stormwind** in separate fields. Submit the form, then choose **DPS**, **Healing** or **Tank** to save. **John Stormwind** automatically becomes your first main and receives the Paladin Discord role.
+2. Add **Sam Ironforge** as Warrior and choose **DPS** or **Tank**. Sam becomes an alt, John remains main, and your Discord class role stays Paladin.
 3. Select **Sam Ironforge** from your character dropdown, then choose **Make Main**. Sam becomes main, John automatically becomes an alt, Warrior replaces Paladin, and both character records remain. Switching back works the same way. Two characters of the same class can exchange main status without removing and reassigning that role.
-4. Select a character and use **Edit** to change either name component or the class while preserving the record and main/alt status. Editing an alt's class does not assign an alt role; editing the main's class synchronizes the main role.
+4. Select a character and use **Edit** to change either name component, class or gameplay role while preserving the record and main/alt status. Submit the details, then choose a supported role to save. Editing an alt's class does not assign an alt role; editing the main's class synchronizes the main Discord role.
 5. Select a character and choose **Remove** to see a confirmation. Removing a main with alts first requires choosing a replacement; the old main is removed only after the replacement succeeds. Removing the only character requires `ALLOW_CLEAR_SELECTION=true`.
 
 Your private dashboard refreshes after changes and keeps the character you just added or edited selected. Choosing a character only changes what you are viewing; **Make Main** is a separate action. Paging, Back and Cancel keep navigation in the same private message. Rejected forms keep your entries behind **Edit Details**, so corrections do not require retyping everything.
+
+Each character has one gameplay role, shown in personal and community rosters. The role dropdown offers only roles supported by the selected class; choosing one saves the character. Closing or going back before choosing a role discards the draft. Existing characters show **Role not set** after upgrading; use **Edit** to choose one. Gameplay roles are roster details; the main's class still controls the Discord class color.
+
+| Classes | Available gameplay roles |
+| --- | --- |
+| Hunter, Mage, Rogue, Warlock | DPS |
+| Priest, Shaman, Evoker | DPS, Healing |
+| Warrior, Death Knight, Demon Hunter | DPS, Tank |
+| Paladin, Druid, Monk | DPS, Healing, Tank |
+
+These are the standard [Blizzard class roles](https://worldofwarcraft.blizzard.com/en-us/game/classes); seasonal alternate roles are not included. Modern classes appear only when enabled by the operator.
 
 Choose **Done** to close your menu. Menus also close after five minutes without interaction; opening another menu in the same channel removes your previous one. Discord does not tell bots when you switch text channels, so closing is based on Done or inactivity. Cleanup is best effort while the bot is running; menus from before a restart may still need Discord's Dismiss message action. You can enter names you plan to use and edit them later; both name fields are still required, and the bot never invents names or claims they are reserved in the game.
 
@@ -30,6 +41,7 @@ Discord displays the color of a member's highest colored role. An officer role a
 
 - The nine original Classic classes enabled by default; four modern classes available by configuration.
 - Two-part Unicode character names, one main per guild member, automatic main/alt switching and private dashboards.
+- Per-character DPS, Healing or Tank selection with class restrictions.
 - A community roster with native filters and pagination to discover members' current character plans.
 - Automatic role discovery and creation on startup and server join, with safe, repeatable synchronization.
 - Persistent panels, character records and SQLite role associations that survive container restarts.
@@ -93,7 +105,7 @@ After editing `.env`, run `docker compose up -d --force-recreate` (include the b
 
 Class roles must be cosmetic: **no role permissions and no channel permission grants**. The bot refuses unsafe, integration-owned, ambiguous or unmanageable roles. It never deletes roles or reorders server roles. Disabling a class alone preserves its characters and role assignments. An explicit switch to an enabled registered main removes obsolete managed class assignments, including an old disabled-class assignment, so only the main determines the class color. Legacy class-only selection retains its original enabled-only cleanup policy.
 
-Run exactly one process per application/database. Keep `.env`, token files and backups private. The database now stores Discord owner IDs, self-reported character names/classes, main associations and recovery operations alongside server/role/panel IDs. No Battle.net credentials or message contents are collected. Leaving a guild does not delete a roster. See [SECURITY.md](SECURITY.md) for privacy, deletion, token rotation and private vulnerability reporting.
+Run exactly one process per application/database. Keep `.env`, token files and backups private. The database now stores Discord owner IDs, self-reported character names/classes/gameplay roles, main associations and recovery operations alongside server/role/panel IDs. No Battle.net credentials or message contents are collected. Leaving a guild does not delete a roster. See [SECURITY.md](SECURITY.md) for privacy, deletion, token rotation and private vulnerability reporting.
 
 Before upgrading from the class-only release, stop the bot and back up its `/data` volume. Schema migrations preserve existing roles and panel IDs; the saved panel is updated in place. A rollback to an older image may require restoring the pre-upgrade database. See [deployment](docs/deployment.md#upgrading-an-existing-class-only-installation).
 

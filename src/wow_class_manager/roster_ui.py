@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 import discord
 
+from .character_roles import role_name
 from .character_ui import OwnedView, class_name, page_slice, safe_text
 from .roles import UserError
 
@@ -100,7 +101,7 @@ async def show_guild_roster(
     for character in entries:
         designation = "Main" if character.is_main else "Alt"
         lines.append(
-            f"**{safe_text(character.full_name, 110)}** | {class_name(character.class_id)} | {designation}\n"
+            f"**{safe_text(character.full_name, 110)}** | {class_name(character.class_id)} | {role_name(character.gameplay_role)} | {designation}\n"
             f"Owned by {owner_label(guild, character.user_id)}"
         )
     if not entries:
