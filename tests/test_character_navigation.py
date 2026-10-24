@@ -333,18 +333,22 @@ async def test_real_guild_browser_filter_reuses_private_message_without_deadlock
     browser = browse.edit_original_response.call_args.kwargs["view"]
     assert isinstance(browser, GuildRosterBrowser)
     assert old.is_finished()
+    assert browse.edit_original_response.call_args.kwargs["attachments"] == []
+    filters = component(guild)
+    filters.message.flags.components_v2 = True
+    await browser.open_filters(filters)
+    filter_view = filters.edit_original_response.call_args.kwargs["view"]
     choose_class = component(guild)
+    choose_class.message.flags.components_v2 = True
     choose_class.data = {"values": ["paladin"]}
-    await asyncio.wait_for(browser.change_class(choose_class), 1)
-    ui.manager.guild_roster.assert_awaited_with(
-        guild, choose_class.user, user_id=None, class_id="paladin", kind="all"
-    )
+    await asyncio.wait_for(filter_view.change_class(choose_class), 1)
+    ui.manager.guild_roster.assert_awaited_with(guild, choose_class.user)
     choose_class.response.defer.assert_awaited_once_with(ephemeral=True, thinking=False)
     choose_class.followup.send.assert_not_called()
     current = choose_class.edit_original_response.call_args.kwargs
-    assert current["embed"].title == "Guild Paladin Roster"
-    assert current["view"].class_id == "paladin"
-    assert browser.is_finished()
+    assert "embed" not in current
+    assert current["view"].filters.class_id == "paladin"
+    assert filter_view.is_finished()
 
 
 async def test_removing_last_character_returns_empty_dashboard(

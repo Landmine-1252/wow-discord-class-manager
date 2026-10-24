@@ -475,8 +475,9 @@ async def test_save_failure_preserves_selected_role_and_original_edit_version(
         assert operation.call_args.kwargs["expected_updated_at"] == original.updated_at
 
 
+@pytest.mark.parametrize("community", [False, True])
 async def test_saved_and_unset_roles_appear_on_personal_and_community_rosters(
-    character_controller, guild
+    character_controller, guild, community
 ):
     entries = [
         character(class_id="priest", gameplay_role="healing", main=True),
@@ -487,12 +488,19 @@ async def test_saved_and_unset_roles_appear_on_personal_and_community_rosters(
     ui = character_controller
     ui.manager.roster.return_value = roster(*entries)
     ui.manager.guild_roster.return_value = entries
-    for display in (ui.open, ui.guild_roster):
-        call = interaction(guild, guild.member())
-        await display(call)
+    call = interaction(guild, guild.member())
+    if community:
+        await ui.guild_roster(call, kind="all")
+        description = "\n".join(
+            item.content
+            for item in call.followup.send.call_args.kwargs["view"].walk_children()
+            if isinstance(item, discord.ui.TextDisplay)
+        )
+    else:
+        await ui.open(call)
         description = call.followup.send.call_args.kwargs["embed"].description
-        for label in ("Healing", "DPS", "Tank", "Role not set"):
-            assert label in description
+    for label in ("Healing", "DPS", "Tank", "Role not set"):
+        assert label in description
 
 
 async def test_direct_class_update_cannot_keep_incompatible_role(store):

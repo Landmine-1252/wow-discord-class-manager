@@ -173,8 +173,8 @@ class CharacterController:
         self._navigation_locks: WeakValueDictionary[SessionKey, asyncio.Lock] = (
             WeakValueDictionary()
         )
-        self._private_views: WeakValueDictionary[int, OwnedView] = WeakValueDictionary()
-        self._private_sessions: WeakValueDictionary[SessionKey, OwnedView] = (
+        self._private_views: WeakValueDictionary[int, OwnedMenu] = WeakValueDictionary()
+        self._private_sessions: WeakValueDictionary[SessionKey, OwnedMenu] = (
             WeakValueDictionary()
         )
 
@@ -195,11 +195,13 @@ class CharacterController:
             and message.author.id == self.bot.user.id
         )
 
-    def track_view(self, message_id: int, view: discord.ui.View | None) -> None:
+    def track_view(
+        self, message_id: int, view: discord.ui.View | discord.ui.LayoutView | None
+    ) -> None:
         previous = self._private_views.pop(message_id, None)
         if previous is not None and previous is not view:
             previous.stop()
-        if isinstance(view, OwnedView):
+        if isinstance(view, OwnedMenu):
             view.message_id = message_id
             self._private_views[message_id] = view
 
@@ -207,11 +209,11 @@ class CharacterController:
         self,
         interaction: discord.Interaction,
         message_id: int,
-        view: discord.ui.View | None,
+        view: discord.ui.View | discord.ui.LayoutView | None,
         delete_message: Callable[[], Awaitable[None]],
     ) -> None:
         self.track_view(message_id, view)
-        if isinstance(view, OwnedView):
+        if isinstance(view, OwnedMenu):
             key = self.session_key(interaction)
             previous = self._private_sessions.get(key)
             view.session_key, view.delete_message = key, delete_message
@@ -321,7 +323,7 @@ class CharacterController:
         *,
         content: str | None = None,
         embed: discord.Embed | None = None,
-        view: discord.ui.View | None = None,
+        view: discord.ui.View | discord.ui.LayoutView | None = None,
     ) -> None:
         kwargs = {
             "content": self.bot.redact(content) if content else None,
@@ -329,11 +331,23 @@ class CharacterController:
             "view": view,
             "allowed_mentions": discord.AllowedMentions.none(),
         }
+        layout = isinstance(view, discord.ui.LayoutView)
+        if layout:
+            # Components V2 carry their own text and cannot carry embeds.
+            kwargs.pop("content")
+            kwargs.pop("embed")
+        source_layout = (
+            getattr(getattr(interaction.message, "flags", None), "components_v2", False)
+            is True
+        )
         if (
             interaction.response.type
             == discord.InteractionResponseType.deferred_message_update
             and self.private_source(interaction)
+            and not (source_layout and not layout)
         ):
+            if layout and not source_layout:
+                kwargs.update(content=None, embed=None, attachments=[])
             await interaction.edit_original_response(**kwargs)
             await self.bind_view(
                 interaction,
@@ -342,6 +356,8 @@ class CharacterController:
                 interaction.delete_original_response,
             )
         elif interaction.response.is_done():
+            # Discord cannot remove the V2 flag. Bind the replacement first;
+            # session cleanup then retires the old directory message.
             message = await interaction.followup.send(
                 **kwargs, ephemeral=True, wait=True
             )
@@ -837,7 +853,9 @@ class CharacterController:
         *,
         user_id: int | None = None,
         class_id: str | None = None,
-        kind: str = "all",
+        kind: str = "mains",
+        gameplay_role: str | None = None,
+        query: str = "",
         page: int = 0,
         panel: bool = False,
     ) -> None:
@@ -850,20 +868,23 @@ class CharacterController:
                 user_id=user_id,
                 class_id=class_id,
                 kind=kind,
+                gameplay_role=gameplay_role,
+                query=query,
                 page=page,
             )
 
         await self.execute(interaction, show, panel=panel)
 
 
-class OwnedView(discord.ui.View):
+class OwnedMenu:
+    """Shared ownership, navigation and cleanup for both Discord view formats."""
+
     def __init__(self, controller: CharacterController, guild_id: int, owner_id: int):
         super().__init__(timeout=PRIVATE_TIMEOUT)
         self.controller, self.guild_id, self.owner_id = controller, guild_id, owner_id
         self.message_id: int | None = None
         self.session_key: SessionKey | None = None
         self.delete_message: Callable[[], Awaitable[None]] | None = None
-        self.button("Done", self.done, row=4)
 
     async def dismiss(self) -> None:
         """Retire only this private menu, even if a new menu already replaced it."""
@@ -958,6 +979,16 @@ class OwnedView(discord.ui.View):
         await self.controller.controller.handle_error(
             interaction, error, action="character"
         )
+
+
+class OwnedLayoutView(OwnedMenu, discord.ui.LayoutView):
+    """A Components V2 menu using the same private-session lifecycle."""
+
+
+class OwnedView(OwnedMenu, discord.ui.View):
+    def __init__(self, controller: CharacterController, guild_id: int, owner_id: int):
+        super().__init__(controller, guild_id, owner_id)
+        self.button("Done", self.done, row=4)
 
     def button(
         self,

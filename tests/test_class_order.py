@@ -11,7 +11,8 @@ from wow_class_manager.classes import ALPHABETICAL_CLASSES, REGISTRY
 from wow_class_manager.commands import build_commands
 from wow_class_manager.config import Settings
 from wow_class_manager.logging_setup import Redactor
-from wow_class_manager.roster_ui import GuildRosterBrowser
+from wow_class_manager.roster_directory import Directory, RosterFilters
+from wow_class_manager.roster_ui import RosterFilterView
 from wow_class_manager.ui import ClassSelect
 
 CLASSIC_NAMES = [
@@ -104,9 +105,11 @@ async def test_character_modal_groups_choices_and_keeps_saved_disabled_class(
 
 async def test_guild_roster_dropdown_and_command_alphabetize_enabled_classes(
     controller,
+    guild,
 ):
     ui = controller.characters_ui
-    browser = GuildRosterBrowser(ui, 123, 456)
+    filters = RosterFilters()
+    browser = RosterFilterView(ui, guild, 456, Directory([], filters), filters)
     expected = CLASSIC_NAMES
     assert [option.label for option in browser.class_filter.options] == [
         "All classes",

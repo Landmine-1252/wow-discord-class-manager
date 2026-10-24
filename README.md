@@ -33,7 +33,9 @@ Choose **Done** to close your menu. Menus also close after five minutes without 
 
 WoW Forever uses two name components, with full-name uniqueness within a game region. The bot uses the complete name for local roster comparisons but cannot verify game ownership, availability or naming-policy approval. Its default 2–12 characters per component are configurable application limits. [Blizzard's naming overview](https://news.blizzard.com/en-us/article/24304161/create-a-name-of-your-own-in-wow-forever)
 
-`/character list` privately shows your main and alts. **Community Roster** or `/roster` lets you browse what other members plan to play using class, main/alt and member dropdown filters, with paging and Reset Filters. Access follows the operator's roster visibility setting. Long rosters use pages; the default character limit is unlimited. Different Discord users may self-report the same full name, while duplicates within one member's guild roster are rejected.
+`/character list` privately shows your main and alts. **Community Roster** or `/roster` opens a searchable guild directory: mains first, eight compact entries per page, sorted by character name. The overview shows registered members, total characters and gameplay-role counts for mains, including unset roles. Each entry has class and role icons, an owner, an alt count when applicable, and **View** to open that member's characters. **Back to Roster** restores your filters and page.
+
+**Search** accepts part of a character name and includes alts; its native member picker jumps to a particular Discord member without typing their name. **Filters** opens class, gameplay-role and mains/alts/all dropdowns, including **Role not set**. Name and member searches combine with class and role filters. **Reset** returns to the unfiltered mains directory. Slash commands support the same options, such as `/roster query:Storm gameplay_role:healing`. Access follows the operator's roster visibility setting. The directory uses ordinary Discord components and requires no Nitro, boosts or custom emoji uploads. Long personal rosters also use pages; the default character limit is unlimited. Different Discord users may self-report the same full name, while duplicates within one member's guild roster are rejected.
 
 Discord displays the color of a member's highest colored role. An officer role above a class role can override the visible class color.
 
@@ -42,7 +44,7 @@ Discord displays the color of a member's highest colored role. An officer role a
 - The nine original Classic classes enabled by default; four modern classes available by configuration.
 - Two-part Unicode character names, one main per guild member, automatic main/alt switching and private dashboards.
 - Per-character DPS, Healing or Tank selection with class restrictions and a free Discord profile tag for the main.
-- A community roster with native filters and pagination to discover members' current character plans.
+- A searchable guild directory with main-role totals, compact pages, native filters and member details.
 - Automatic role discovery and creation on startup and server join, with safe, repeatable synchronization.
 - Persistent panels, character records and SQLite role associations that survive container restarts.
 - Configurable role names, colors, panel text, command names and guild allowlist.

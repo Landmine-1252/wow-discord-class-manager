@@ -7,6 +7,7 @@ from discord import app_commands
 
 from .character_roles import role_name
 from .character_ui import CharacterController, class_name, safe_text
+from .classes import GAMEPLAY_ROLE_TAGS
 
 
 def build_character_commands(controller: CharacterController) -> app_commands.Group:
@@ -120,14 +121,17 @@ def build_character_commands(controller: CharacterController) -> app_commands.Gr
 
 def build_roster_command(controller: CharacterController) -> app_commands.Command:
     @app_commands.command(
-        name="roster", description="View registered guild characters, mains and alts"
+        name="roster",
+        description="Search the guild directory and browse mains and alts",
     )
     @app_commands.guild_only()
     @app_commands.allowed_installs(guilds=True, users=False)
     @app_commands.describe(
         member="Filter by Discord member",
         wow_class="Filter by an enabled class; omit to include all saved characters",
-        kind="Show mains, alts or all registered characters",
+        kind="Show mains, alts or all characters; defaults to mains unless searching",
+        gameplay_role="Filter by DPS, Healing, Tank or an unset role",
+        query="Find a character by full name or part of a name, including alts",
     )
     @app_commands.choices(
         wow_class=[
@@ -139,18 +143,31 @@ def build_roster_command(controller: CharacterController) -> app_commands.Comman
             app_commands.Choice(name="Main characters", value="mains"),
             app_commands.Choice(name="Alternate characters", value="alts"),
         ],
+        gameplay_role=[
+            *[
+                app_commands.Choice(name=label, value=value)
+                for value, label in GAMEPLAY_ROLE_TAGS.items()
+            ],
+            app_commands.Choice(name="Role not set", value="unset"),
+        ],
     )
     async def roster(
         interaction: discord.Interaction,
         member: discord.Member | None = None,
         wow_class: str | None = None,
-        kind: str = "all",
+        kind: str | None = None,
+        gameplay_role: str | None = None,
+        query: str = "",
     ) -> None:
+        if kind is None:
+            kind = "all" if query.strip() else "mains"
         await controller.guild_roster(
             interaction,
             user_id=member.id if member else None,
             class_id=wow_class,
             kind=kind,
+            gameplay_role=gameplay_role,
+            query=query.strip(),
         )
 
     return roster

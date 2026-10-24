@@ -84,7 +84,7 @@ Members can manage their own characters without an officer:
 | Promote an alt | My Characters → choose character → Make Main | `/character main` |
 | Rename or change class | My Characters → choose character → Edit | `/character edit` |
 | Remove a character | My Characters → choose character → Remove → confirm | `/character remove` |
-| View guild characters | Community Roster → class, main/alt or member filter | `/roster` |
+| View guild characters | Community Roster → Search, Filters or View | `/roster` |
 
 Main selection is one operation: the old main automatically becomes an alt. Selecting John Stormwind again switches back without recreating either record. Editing Sam Ironforge while Sam is an alt does not assign another class role. Editing the main's class changes its Discord role after validation. Names can be edited independently; the internal character ID and main/alt designation stay the same.
 
@@ -98,7 +98,11 @@ Add/Edit asks for both name parts and one **Class & Role** choice in the same fo
 
 Choose Done when finished to close the private message. Inactive menus also close after five minutes, and opening another menu in the same channel removes your previous one. The bot cannot detect when you switch text channels. After a restart or failed cleanup, use Discord's Dismiss message action for an older menu.
 
-Community Roster lists only self-reported registered characters in the current server. Change the class, main/alt and member filters using dropdowns; use Previous/Next for pages and Reset Filters to show everyone again. Operators can restrict access to Manage Server holders or disable it; private personal rosters remain available. When access is restricted to admins, the public button remains visible but refuses unauthorized requests. Members cannot edit another member's characters. `/character purge` is an officer-only confirmed deletion workflow for a user's stored character data, including departed users; it leaves their Discord roles as a legacy selection.
+Community Roster opens on mains, with eight compact entries per page in alphabetical character-name order. Its overview counts registered members and characters; Tank, Healing, DPS and unset counts describe mains across the guild. Each row shows class and role icons, its owner and any alt count. **View** opens that member's main and alts; **Back to Roster** restores the same search, filters and page. Members without a selected main are noted in the overview and remain discoverable under All characters.
+
+Use **Search** for part of a character name or the native Discord member picker. Name searches include alts while retaining class and role filters. **Filters** opens class, gameplay-role and mains/alts/all dropdowns; choose **Show Results** to return to the directory. **Reset** returns to all mains. The same options are available through `/roster`, including `query` and `gameplay_role`. All browsing is private, uses ordinary free Discord components and lists only self-reported registered characters in this server. Switching from the directory to My Characters replaces the private message and closes the old one.
+
+Operators can restrict access to Manage Server holders or disable it; private personal rosters remain available. When access is restricted to admins, the public button remains visible but refuses unauthorized requests. Members cannot edit another member's characters. `/character purge` is an officer-only confirmed deletion workflow for a user's stored character data, including departed users; it leaves their Discord roles as a legacy selection.
 
 When upgrading an existing installation, members with only a class role will see guidance such as “You currently have Paladin selected. Register your main character to begin managing your characters and alts.” Their role remains unchanged until they register. No game character names are inferred from Discord names or roles. If an imported legacy character needs its second name, select it and use Edit to complete both fields rather than creating a duplicate.
 

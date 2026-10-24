@@ -592,13 +592,16 @@ async def test_guild_roster_uses_filters_and_pagination(character_controller, gu
     await character_controller.guild_roster(
         call, class_id="warrior", kind="alts", user_id=456, page=1
     )
-    character_controller.manager.guild_roster.assert_awaited_once_with(
-        guild, call.user, user_id=456, class_id="warrior", kind="alts"
-    )
+    character_controller.manager.guild_roster.assert_awaited_once_with(guild, call.user)
     sent = call.followup.send.call_args.kwargs
-    assert "Page 2/3" in sent["embed"].footer.text
-    assert "Sam Family16" in sent["embed"].description
-    assert "Owned by <@456>" in sent["embed"].description
+    description = "\n".join(
+        item.content
+        for item in sent["view"].walk_children()
+        if isinstance(item, discord.ui.TextDisplay)
+    )
+    assert "Page 2/4" in description
+    assert "Sam Family18" in description
+    assert "<@456>" in description
     assert sent["allowed_mentions"].everyone is False
 
 
@@ -651,6 +654,8 @@ def test_command_builders_and_autocomplete_registration(character_controller):
         "member",
         "wow_class",
         "kind",
+        "gameplay_role",
+        "query",
     }
 
 
@@ -779,10 +784,18 @@ async def test_maximum_name_lengths_fit_roster_and_guild_embed(
     character_controller.manager.guild_roster.return_value = entries
     guild.get_member = lambda user_id: SimpleNamespace(display_name="*" * 100)
     guild_call = interaction(guild, guild.members[456])
-    await character_controller.guild_roster(guild_call)
-    guild_description = guild_call.followup.send.call_args.kwargs["embed"].description
-    assert len(guild_description) <= 4096
-    assert all(entry.full_name in guild_description for entry in entries)
+    await character_controller.guild_roster(guild_call, kind="all")
+    guild_view = guild_call.followup.send.call_args.kwargs["view"]
+    assert guild_view.content_length() <= 4000
+    names = [
+        item.content
+        for item in guild_view.walk_children()
+        if isinstance(item, discord.ui.Section)
+        for item in item.children
+        if isinstance(item, discord.ui.TextDisplay)
+    ]
+    assert len(names) == 8
+    assert all(any(entry.full_name in name for entry in entries) for name in names)
 
 
 async def test_legacy_roster_page_bounds_include_every_entry_and_warning(
