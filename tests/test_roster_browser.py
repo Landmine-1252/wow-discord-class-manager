@@ -161,6 +161,18 @@ async def test_filter_changes_reset_page_and_preserve_other_filters(
         guild, call.user, **expected
     )
     assert browser_controller.send.call_args.kwargs["view"].page == 0
+    selected_class = expected["class_id"]
+    expected_color = next(
+        (
+            entry.color
+            for entry in browser_controller.settings.classes
+            if entry.id == selected_class
+        ),
+        browser_controller.settings.panel_accent_color,
+    )
+    assert (
+        browser_controller.send.call_args.kwargs["embed"].colour.value == expected_color
+    )
     browser_controller.guild_roster.assert_not_called()
     assert browser.page == 2
     assert browser.class_id == "warrior"
@@ -467,7 +479,7 @@ async def test_all_classes_keeps_saved_disabled_characters_visible(
     call = interaction(guild, guild.member())
     await browser_controller.guild_roster(call)
     sent = browser_controller.send.call_args.kwargs
-    assert "Monk | Role not set | Main" in sent["embed"].description
+    assert "Monk | Role not set | ⭐ Main" in sent["embed"].description
     assert "Death Knight | Role not set | Alt" in sent["embed"].description
     assert [entry.class_id for entry in saved] == ["monk", "death_knight"]
     assert "monk" not in {option.value for option in sent["view"].class_filter.options}

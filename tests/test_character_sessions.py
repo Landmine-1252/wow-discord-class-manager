@@ -244,7 +244,7 @@ async def test_submission_after_done_cannot_save_from_the_closed_modal(
     view, _ = await open_menu(ui, guild)
     modal = CharacterModal(ui, guild.id, 456, source_view=view)
     modal.primary._value, modal.secondary._value = "John", "Stormwind"
-    modal.class_select._values = ["paladin"]
+    modal.class_role_select._values = ["paladin:tank"]
     done = component(guild)
     done.channel_id = 555
     await view.done(done)
@@ -277,7 +277,7 @@ async def test_invalid_form_keeps_draft_and_retries_in_the_same_message(
     ui.manager.add.side_effect = UserError("First Name must contain letters only.")
     modal = CharacterModal(ui, guild.id, 456, source_view=old)
     modal.primary._value, modal.secondary._value = "J0hn", "Stormwind"
-    modal.class_select._values = ["paladin"]
+    modal.class_role_select._values = ["paladin:healing"]
     submit = component(guild)
     submit.type = discord.InteractionType.modal_submit
     await modal.on_submit(submit)
@@ -294,23 +294,19 @@ async def test_invalid_form_keeps_draft_and_retries_in_the_same_message(
     assert reopened.primary.default == "J0hn"
     assert reopened.secondary.default == "Stormwind"
     assert [
-        option.value for option in reopened.class_select.options if option.default
-    ] == ["paladin"]
+        option.value for option in reopened.class_role_select.options if option.default
+    ] == ["paladin:healing"]
     reopened.primary._value, reopened.secondary._value = "John", "Stormwind"
-    reopened.class_select._values = ["paladin"]
+    reopened.class_role_select._values = ["paladin:healing"]
     ui.manager.add.side_effect = None
     ui.manager.roster.return_value = roster(character(main=True))
     fixed = component(guild)
     fixed.type = discord.InteractionType.modal_submit
     await reopened.on_submit(fixed)
-    picker = fixed.edit_original_response.call_args.kwargs["view"]
-    selected = component(guild)
-    selected.data = {"values": ["healing"]}
-    await picker.selected(selected)
     ui.manager.add.assert_awaited_with(
         guild, 456, "John", "Stormwind", "paladin", "healing"
     )
-    assert selected.edit_original_response.call_args.kwargs["view"].selected.id == 1
+    assert fixed.edit_original_response.call_args.kwargs["view"].selected.id == 1
     assert retry.is_finished()
 
 
@@ -326,14 +322,10 @@ async def test_new_alt_is_selected_on_its_page_after_registration(
     ui.manager.roster.return_value = roster(*entries, added)
     modal = CharacterModal(ui, guild.id, 456)
     modal.primary._value, modal.secondary._value = "Sa\u0301m", "Ironforge"
-    modal.class_select._values = ["warrior"]
+    modal.class_role_select._values = ["warrior:tank"]
     call = interaction(guild, guild.member())
     await modal.on_submit(call)
-    picker = call.followup.send.call_args.kwargs["view"]
-    selected = interaction(guild, guild.member())
-    selected.data = {"values": ["tank"]}
-    await picker.selected(selected)
-    view = selected.followup.send.call_args.kwargs["view"]
+    view = call.followup.send.call_args.kwargs["view"]
     assert view.page == 1 and view.selected.id == 17
     assert not button(view, "Make Main").disabled
 

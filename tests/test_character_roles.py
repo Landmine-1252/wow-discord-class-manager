@@ -18,11 +18,10 @@ from wow_class_manager.character_roles import validate_gameplay_role
 from wow_class_manager.character_store import CharacterStore
 from wow_class_manager.character_ui import (
     CharacterModal,
-    CharacterRolePicker,
     RemovalConfirmation,
     RetryCharacterView,
 )
-from wow_class_manager.classes import GAMEPLAY_ROLES, REGISTRY
+from wow_class_manager.classes import GAMEPLAY_ROLES, REGISTRY, ClassRole
 from wow_class_manager.roles import UserError
 from wow_class_manager.storage import StorageError
 
@@ -43,16 +42,92 @@ CAPABILITIES = {
 }
 
 
+@pytest.mark.parametrize("saved_class", [None, "paladin"])
+async def test_all_class_role_combinations_fit_one_menu_and_stay_grouped(
+    character_controller, saved_class
+):
+    ui = character_controller
+    ui.settings = replace(
+        ui.settings,
+        classes=tuple(
+            ClassRole(entry, entry.name, entry.color)
+            for entry in REGISTRY.values()
+            if entry.id != saved_class
+        ),
+    )
+    modal = CharacterModal(
+        ui, 123, 456, character(class_id=saved_class) if saved_class else None
+    )
+    options = modal.class_role_select.options
+    assert len(options) == 25
+    assert {option.value for option in options} == {
+        f"{class_id}:{role}"
+        for class_id, allowed in CAPABILITIES.items()
+        for role in allowed
+    }
+    grouped = list(dict.fromkeys(option.value.partition(":")[0] for option in options))
+    assert grouped == [
+        entry.id
+        for entry in sorted(REGISTRY.values(), key=lambda entry: entry.name.casefold())
+    ]
+    assert all(
+        option.emoji
+        and len(option.label) <= 100
+        and len(option.value) <= 100
+        and len(option.description) <= 100
+        for option in options
+    )
+
+
+@pytest.mark.parametrize("locked", [False, True])
+async def test_combined_form_rechecks_class_policy_on_submission(
+    character_controller, guild, locked
+):
+    ui = character_controller
+    saved = character(main=True) if locked else None
+    modal = CharacterModal(ui, guild.id, 456, saved)
+    modal.primary._value, modal.secondary._value = "John", "Stormwind"
+    modal.class_role_select._values = ["mage:dps"]
+    if locked:
+        ui.settings = replace(ui.settings, allow_character_class_edit=False)
+    else:
+        ui.settings = replace(
+            ui.settings,
+            classes=tuple(entry for entry in ui.settings.classes if entry.id != "mage"),
+        )
+    call = interaction(guild, guild.member())
+    await modal.on_submit(call)
+    ui.manager.add.assert_not_called()
+    ui.manager.edit.assert_not_called()
+    assert (
+        "class editing is disabled" if locked else "enabled character class"
+    ) in call.followup.send.call_args.kwargs["content"]
+
+
+async def test_unknown_locked_legacy_class_has_actionable_error(character_controller):
+    character_controller.settings = replace(
+        character_controller.settings, allow_character_class_edit=False
+    )
+    with pytest.raises(
+        UserError, match="Ask an admin to enable character class editing"
+    ):
+        CharacterModal(character_controller, 123, 456, character(class_id="unknown"))
+
+
 @pytest.mark.parametrize("class_id,allowed", CAPABILITIES.items())
-async def test_class_role_policy_and_picker_offer_only_supported_roles(
+async def test_class_role_policy_and_locked_class_form_offer_only_supported_roles(
     character_controller, class_id, allowed
 ):
     assert set(REGISTRY) == set(CAPABILITIES)
-    picker = CharacterRolePicker(
-        character_controller, 123, 456, None, ("John", "Stormwind", class_id)
+    character_controller.settings = replace(
+        character_controller.settings, allow_character_class_edit=False
     )
-    assert {option.value for option in picker.select.options} == allowed
-    assert picker.select.min_values == picker.select.max_values == 1
+    modal = CharacterModal(character_controller, 123, 456, character(class_id=class_id))
+    assert {option.value for option in modal.class_role_select.options} == {
+        f"{class_id}:{role}" for role in allowed
+    }
+    assert modal.class_role_select.min_values == modal.class_role_select.max_values == 1
+    assert not any(option.default for option in modal.class_role_select.options)
     for role in (*GAMEPLAY_ROLES, None, "unknown"):
         if role in allowed:
             validate_gameplay_role(class_id, role)
@@ -211,53 +286,67 @@ async def test_role_can_change_when_class_editing_is_disabled(character_setup, g
     ).main.gameplay_role == "dps"
 
 
-async def test_role_picker_rechecks_owner_allowlist_and_submitted_role(
+async def test_role_form_rechecks_owner_allowlist_and_submitted_role(
     character_controller, guild
 ):
     ui = character_controller
-    picker = CharacterRolePicker(
-        ui, guild.id, 456, None, ("John", "Stormwind", "hunter")
-    )
+    modal = CharacterModal(ui, guild.id, 456)
+    modal.primary._value, modal.secondary._value = "John", "Stormwind"
+    modal.class_role_select._values = ["hunter:dps"]
     outsider = interaction(guild, guild.member(789))
-    outsider.data = {"values": ["dps"]}
-    await picker.selected(outsider)
+    await modal.on_submit(outsider)
     ui.manager.add.assert_not_called()
     assert (
         "another member" in outsider.response.send_message.call_args.kwargs["content"]
     )
     ui.settings = replace(ui.settings, allowed_guild_ids=frozenset({999}))
     denied = interaction(guild, guild.member())
-    denied.data = {"values": ["dps"]}
-    await picker.selected(denied)
+    await modal.on_submit(denied)
     ui.manager.add.assert_not_called()
     ui.settings = replace(ui.settings, allowed_guild_ids=frozenset())
     forged = interaction(guild, guild.member())
-    forged.data = {"values": ["tank"]}
-    await picker.selected(forged)
+    modal.class_role_select._values = ["hunter:tank"]
+    await modal.on_submit(forged)
     ui.manager.add.assert_not_called()
     result = forged.followup.send.call_args.kwargs
     assert "Hunter cannot select Tank" in result["content"]
     assert isinstance(result["view"], RetryCharacterView)
-    assert result["view"].draft == ("John", "Stormwind", "hunter")
+    assert result["view"].draft == ("John", "Stormwind", "hunter", "tank")
 
 
-async def test_changed_class_filters_role_choices_and_keeps_stale_edit_version(
+async def test_changed_class_revalidates_role_and_keeps_stale_edit_version(
     character_controller, guild
 ):
     ui = character_controller
     saved = character(class_id="priest", gameplay_role="healing", main=True)
     modal = CharacterModal(ui, guild.id, 456, saved)
+    assert "hunter:healing" not in {
+        option.value for option in modal.class_role_select.options
+    }
+    assert [
+        option.value for option in modal.class_role_select.options if option.default
+    ] == ["priest:healing"]
     modal.primary._value, modal.secondary._value = "John", "Stormwind"
-    modal.class_select._values = ["hunter"]
+    modal.class_role_select._values = ["hunter:healing"]
     submit = component(guild)
     submit.type = discord.InteractionType.modal_submit
     await modal.on_submit(submit)
-    picker = submit.edit_original_response.call_args.kwargs["view"]
-    assert [option.value for option in picker.select.options] == ["dps"]
+    response = submit.edit_original_response.call_args.kwargs
+    assert "Hunter cannot select Healing" in response["content"]
+    retry = response["view"]
+    assert retry.draft == ("John", "Stormwind", "hunter", "healing")
     ui.manager.edit.assert_not_called()
-    choose = component(guild)
-    choose.data = {"values": ["dps"]}
-    await picker.selected(choose)
+    click = component(guild)
+    click.response.send_modal = AsyncMock()
+    await retry.retry(click)
+    corrected = click.response.send_modal.call_args.args[0]
+    assert corrected.character.updated_at == saved.updated_at
+    assert not any(option.default for option in corrected.class_role_select.options)
+    corrected.primary._value, corrected.secondary._value = "John", "Stormwind"
+    corrected.class_role_select._values = ["hunter:dps"]
+    fixed = component(guild)
+    fixed.type = discord.InteractionType.modal_submit
+    await corrected.on_submit(fixed)
     ui.manager.edit.assert_awaited_once_with(
         guild,
         456,
@@ -268,20 +357,122 @@ async def test_changed_class_filters_role_choices_and_keeps_stale_edit_version(
         "dps",
         expected_updated_at=saved.updated_at,
     )
-    await picker.selected(choose)
+    await corrected.on_submit(component(guild))
     assert ui.manager.edit.await_count == 1
 
 
-async def test_dismissed_role_draft_cannot_save(character_controller, guild):
-    picker = CharacterRolePicker(
-        character_controller, guild.id, 456, None, ("John", "Stormwind", "paladin")
+async def test_dismissed_role_retry_cannot_save(character_controller, guild):
+    retry = RetryCharacterView(
+        character_controller,
+        guild.id,
+        456,
+        None,
+        ("John", "Stormwind", "paladin", "tank"),
     )
-    character_controller.track_view(700, picker)
-    await picker.done(component(guild))
-    choose = component(guild)
-    choose.data = {"values": ["tank"]}
-    await picker.selected(choose)
+    character_controller.track_view(700, retry)
+    click = component(guild)
+    click.response.send_modal = AsyncMock()
+    await retry.retry(click)
+    modal = click.response.send_modal.call_args.args[0]
+    modal.primary._value, modal.secondary._value = "John", "Stormwind"
+    modal.class_role_select._values = ["paladin:tank"]
+    await retry.done(component(guild))
+    submit = component(guild)
+    submit.type = discord.InteractionType.modal_submit
+    await modal.on_submit(submit)
     character_controller.manager.add.assert_not_called()
+    assert "closed" in submit.followup.send.call_args.kwargs["content"]
+
+
+@pytest.mark.parametrize(
+    "choices,expected_pair,message",
+    [
+        (["priest:tank"], ("priest", "tank"), "Priest cannot select Tank"),
+        (["hunter:tank"], ("hunter", "tank"), "Hunter cannot select Tank"),
+        (["hunter:healing"], ("hunter", "healing"), "Hunter cannot select Healing"),
+        ([], ("", None), "Choose a class and role"),
+        (["paladin:unknown"], ("paladin", "unknown"), "Choose a gameplay role"),
+        (["paladin:dps", "paladin:tank"], ("", None), "Choose a class and role"),
+        (["paladin"], ("paladin", None), "Choose a class and role"),
+        (["paladin:"], ("paladin", None), "Choose a class and role"),
+        (["paladin:tank:extra"], ("paladin", "tank:extra"), "Choose a gameplay role"),
+        (["unknown:dps"], ("unknown", "dps"), "recognized character class"),
+    ],
+)
+async def test_invalid_modal_role_never_saves_and_keeps_draft(
+    character_controller, guild, choices, expected_pair, message
+):
+    modal = CharacterModal(character_controller, guild.id, 456)
+    modal.primary._value, modal.secondary._value = "John", "Stormwind"
+    modal.class_role_select._values = choices
+    call = interaction(guild, guild.member())
+    await modal.on_submit(call)
+    character_controller.manager.add.assert_not_called()
+    character_controller.manager.edit.assert_not_called()
+    result = call.followup.send.call_args.kwargs
+    assert message in result["content"]
+    assert result["view"].draft == (
+        "John",
+        "Stormwind",
+        *expected_pair,
+    )
+
+
+async def test_concurrent_submissions_of_same_form_save_once(
+    character_controller, guild
+):
+    ui = character_controller
+    modal = CharacterModal(ui, guild.id, 456)
+    modal.primary._value, modal.secondary._value = "John", "Stormwind"
+    modal.class_role_select._values = ["paladin:tank"]
+    started, release = asyncio.Event(), asyncio.Event()
+
+    async def add(*args):
+        started.set()
+        await release.wait()
+        return "Character registered."
+
+    ui.manager.add.side_effect = add
+    first = asyncio.create_task(modal.on_submit(interaction(guild, guild.member())))
+    await asyncio.wait_for(started.wait(), 2)
+    repeated = interaction(guild, guild.member())
+    second = asyncio.create_task(modal.on_submit(repeated))
+    await asyncio.sleep(0)
+    release.set()
+    await asyncio.wait_for(asyncio.gather(first, second), 2)
+    ui.manager.add.assert_awaited_once()
+    assert "closed or changed" in repeated.followup.send.call_args.kwargs["content"]
+
+
+@pytest.mark.parametrize("editing", [False, True])
+async def test_save_failure_preserves_selected_role_and_original_edit_version(
+    character_controller, guild, editing
+):
+    ui = character_controller
+    original = character(gameplay_role="healing", main=True) if editing else None
+    operation = ui.manager.edit if editing else ui.manager.add
+    operation.side_effect = UserError("Roles could not be confirmed. Try again.")
+    modal = CharacterModal(ui, guild.id, 456, original)
+    modal.primary._value, modal.secondary._value = "John", "Ironforge"
+    modal.class_role_select._values = ["paladin:tank"]
+    submit = component(guild)
+    submit.type = discord.InteractionType.modal_submit
+    await modal.on_submit(submit)
+    operation.assert_awaited_once()
+    result = submit.edit_original_response.call_args.kwargs
+    assert "could not be confirmed" in result["content"]
+    retry = result["view"]
+    assert retry.draft == ("John", "Ironforge", "paladin", "tank")
+    click = component(guild)
+    click.response.send_modal = AsyncMock()
+    await retry.retry(click)
+    reopened = click.response.send_modal.call_args.args[0]
+    assert reopened.character is original
+    assert [
+        option.value for option in reopened.class_role_select.options if option.default
+    ] == ["paladin:tank"]
+    if editing:
+        assert operation.call_args.kwargs["expected_updated_at"] == original.updated_at
 
 
 async def test_saved_and_unset_roles_appear_on_personal_and_community_rosters(

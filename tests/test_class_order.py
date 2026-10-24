@@ -70,24 +70,36 @@ async def test_legacy_dropdown_and_slash_choices_use_same_alphabetical_order(
     assert [choice.name for choice in command.parameters[0].choices] == CLASSIC_NAMES
 
 
-async def test_character_modal_only_offers_enabled_classes_when_editing_legacy_class(
+async def test_character_modal_groups_choices_and_keeps_saved_disabled_class(
     controller,
 ):
     ui = controller.characters_ui
     new = CharacterModal(ui, 123, 456)
-    assert [option.label for option in new.class_select.options] == CLASSIC_NAMES
+    assert (
+        list(
+            dict.fromkeys(
+                option.label.split(" · ")[0] for option in new.class_role_select.options
+            )
+        )
+        == CLASSIC_NAMES
+    )
     saved = SimpleNamespace(
         id=1,
         class_id="death_knight",
+        gameplay_role=None,
         primary_name="John",
         secondary_name="Stormwind",
         needs_completion=False,
     )
     edit = CharacterModal(ui, 123, 456, character=saved)
-    assert [option.label for option in edit.class_select.options] == CLASSIC_NAMES
-    assert not any(option.default for option in edit.class_select.options)
-    assert not edit.class_select.required
-    assert edit.class_select.min_values == 0
+    assert list(
+        dict.fromkeys(
+            option.label.split(" · ")[0] for option in edit.class_role_select.options
+        )
+    ) == ["Death Knight", *CLASSIC_NAMES]
+    assert not any(option.default for option in edit.class_role_select.options)
+    assert edit.class_role_select.required
+    assert edit.class_role_select.min_values == 1
 
 
 async def test_guild_roster_dropdown_and_command_alphabetize_enabled_classes(
@@ -127,15 +139,15 @@ async def test_edit_disabled_main_preserves_record_and_only_changes_class_if_sel
         modal = CharacterModal(
             current.controller.characters_ui, guild.id, member.id, saved
         )
-        assert "paladin" not in {option.value for option in modal.class_select.options}
+        assert "paladin:tank" in {
+            option.value for option in modal.class_role_select.options
+        }
         modal.primary._value, modal.secondary._value = "John", "Ironforge"
-        modal.class_select._values = [selection] if selection else []
+        modal.class_role_select._values = [
+            f"{selection}:dps" if selection else "paladin:tank"
+        ]
         call = interaction(guild, member)
         await modal.on_submit(call)
-        picker = call.followup.send.call_args.kwargs["view"]
-        selected = interaction(guild, member)
-        selected.data = {"values": ["dps" if selection else "tank"]}
-        await picker.selected(selected)
         result = await current.characters.records.roster(guild.id, member.id)
         assert result.main.id == saved.id
         assert result.main.full_name == "John Ironforge"
@@ -147,7 +159,7 @@ async def test_edit_disabled_main_preserves_record_and_only_changes_class_if_sel
             mapping[selection or "paladin"],
             tags[result.main.gameplay_role],
         }
-        assert "has been updated" in selected.followup.send.call_args.kwargs["content"]
+        assert "has been updated" in call.followup.send.call_args.kwargs["content"]
         if selection is None:
             assert [call.args[0].id for call in member.add_roles.call_args_list] == [
                 tags["tank"]

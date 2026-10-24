@@ -20,7 +20,6 @@ from wow_class_manager.character_ui import (
     CharacterController,
     CharacterModal,
     CharacterPicker,
-    CharacterRolePicker,
     CharacterView,
     PurgeConfirmation,
     RemovalConfirmation,
@@ -163,43 +162,73 @@ async def test_roster_button_hidden_but_old_callback_can_still_be_registered(
     assert registered.is_persistent()
 
 
-async def test_registration_modal_has_separate_names_and_native_class_select(
+async def test_registration_modal_has_names_and_one_combined_class_role_select(
     character_controller,
 ):
     modal = CharacterModal(character_controller, 123, 456)
     assert [item.text for item in modal.children] == [
         "First Name",
         "Secondary Name",
-        "Class",
+        "Class & Role",
     ]
     assert modal.primary.custom_id == "primary_name"
     assert modal.secondary.custom_id == "secondary_name"
     assert modal.primary.required and modal.secondary.required
-    assert modal.class_select.min_values == modal.class_select.max_values == 1
-    assert len(modal.class_select.options) == 9
+    assert modal.class_role_select.min_values == modal.class_role_select.max_values == 1
+    assert len(modal.class_role_select.options) == 16
     data = modal.to_dict()
     assert [item["type"] for item in data["components"]] == [18, 18, 18]
     inputs = [item["component"] for item in data["components"][:2]]
     assert [item["custom_id"] for item in inputs] == ["primary_name", "secondary_name"]
     assert all(item["type"] == 4 and item["style"] == 1 for item in inputs)
     assert data["components"][2]["component"]["type"] == 3
+    role = data["components"][2]["component"]
+    assert role["type"] == 3
+    assert role["custom_id"] == "class_id"
+    assert role["required"] and role["min_values"] == role["max_values"] == 1
+    assert [
+        (option["label"], option["value"], option["emoji"]["name"])
+        for option in role["options"]
+        if option["value"].startswith("paladin:")
+    ] == [
+        ("Paladin · DPS", "paladin:dps", "⚔️"),
+        ("Paladin · Healing", "paladin:healing", "💚"),
+        ("Paladin · Tank", "paladin:tank", "🛡️"),
+    ]
+    assert not any(option["default"] for option in role["options"])
+    assert all(len(option["description"]) <= 100 for option in role["options"])
 
 
 async def test_modal_registration_defers_and_confirms_privately(
     character_controller, guild
 ):
     modal = CharacterModal(character_controller, guild.id, 456)
-    modal.primary._value = "John"
-    modal.secondary._value = "Stormwind"
-    modal.class_select._values = ["paladin"]
     call = interaction(guild, guild.member())
-    await modal.on_submit(call)
-    picker = call.followup.send.call_args.kwargs["view"]
-    assert isinstance(picker, CharacterRolePicker)
-    character_controller.manager.add.assert_not_called()
-    selected = interaction(guild, guild.member())
-    selected.data = {"values": ["healing"]}
-    await picker.selected(selected)
+    call.type = discord.InteractionType.modal_submit
+    components = [
+        {
+            "type": 18,
+            "component": {"type": 4, "custom_id": "primary_name", "value": "John"},
+        },
+        {
+            "type": 18,
+            "component": {
+                "type": 4,
+                "custom_id": "secondary_name",
+                "value": "Stormwind",
+            },
+        },
+        {
+            "type": 18,
+            "component": {
+                "type": 3,
+                "custom_id": "class_id",
+                "values": ["paladin:healing"],
+            },
+        },
+    ]
+    await modal._scheduled_task(call, components, {})
+    assert isinstance(call.followup.send.call_args.kwargs["view"], RosterView)
     character_controller.manager.add.assert_awaited_once_with(
         guild, 456, "John", "Stormwind", "paladin", "healing"
     )
@@ -233,13 +262,9 @@ async def test_edit_modal_preserves_id_and_both_independent_fields(
     existing = character(main=True)
     modal = CharacterModal(character_controller, guild.id, 456, existing)
     modal.primary._value, modal.secondary._value = "John", "Ironforge"
-    modal.class_select._values = ["paladin"]
+    modal.class_role_select._values = ["paladin:tank"]
     call = interaction(guild, guild.member())
     await modal.on_submit(call)
-    picker = call.followup.send.call_args.kwargs["view"]
-    selected = interaction(guild, guild.member())
-    selected.data = {"values": ["tank"]}
-    await picker.selected(selected)
     character_controller.manager.edit.assert_awaited_once_with(
         guild,
         456,
@@ -268,13 +293,22 @@ async def test_edit_picker_opens_modal_before_storage_or_network_reads(
     character_controller.manager.edit.assert_not_called()
 
 
-async def test_class_edit_disabled_hides_class_select(character_controller):
+async def test_class_edit_disabled_only_offers_saved_class(character_controller):
     character_controller.settings = replace(
         character_controller.settings, allow_character_class_edit=False
     )
     modal = CharacterModal(character_controller, 123, 456, character())
-    assert modal.class_select is None
-    assert len(modal.children) == 2
+    assert modal.class_role_select.custom_id == "wow:character:gameplay-role:v1"
+    assert {option.value for option in modal.class_role_select.options} == {
+        "paladin:dps",
+        "paladin:healing",
+        "paladin:tank",
+    }
+    assert [item.text for item in modal.children] == [
+        "First Name",
+        "Secondary Name",
+        "Class & Role",
+    ]
 
 
 async def test_legacy_names_are_not_truncated_or_invented_in_modal(
@@ -291,26 +325,27 @@ async def test_legacy_names_are_not_truncated_or_invented_in_modal(
     assert old.primary_name == "Legacy unsplit name that is too long"
     assert old.secondary_name == ""
     assert "preserved" in modal.children[0].description
-    assert all(len(option.value) <= 100 for option in modal.class_select.options)
+    assert all(len(option.value) <= 100 for option in modal.class_role_select.options)
 
 
-async def test_disabled_class_can_be_kept_for_rename_without_being_a_choice(
+async def test_disabled_class_remains_a_choice_only_for_its_existing_character(
     character_controller,
     guild,
 ):
     old = character(class_id="evoker")
     modal = CharacterModal(character_controller, 123, 456, old)
-    assert "evoker" not in {entry.value for entry in modal.class_select.options}
-    assert not modal.class_select.required
-    assert modal.class_select.min_values == 0
+    saved_options = [
+        entry
+        for entry in modal.class_role_select.options
+        if entry.value.startswith("evoker:")
+    ]
+    assert {entry.value for entry in saved_options} == {"evoker:dps", "evoker:healing"}
+    assert all("Saved class" in entry.description for entry in saved_options)
+    assert modal.class_role_select.required
     modal.primary._value, modal.secondary._value = "John", "Ironforge"
-    modal.class_select._values = []
+    modal.class_role_select._values = ["evoker:healing"]
     call = interaction(guild, guild.member())
     await modal.on_submit(call)
-    picker = call.followup.send.call_args.kwargs["view"]
-    selected = interaction(guild, guild.member())
-    selected.data = {"values": ["healing"]}
-    await picker.selected(selected)
     character_controller.manager.edit.assert_awaited_once_with(
         guild,
         456,
@@ -322,8 +357,14 @@ async def test_disabled_class_can_be_kept_for_rename_without_being_a_choice(
         expected_updated_at=old.updated_at,
     )
     new_modal = CharacterModal(character_controller, 123, 456)
-    assert "evoker" not in {entry.value for entry in new_modal.class_select.options}
-    assert new_modal.class_select.required and new_modal.class_select.min_values == 1
+    assert not any(
+        entry.value.startswith("evoker:")
+        for entry in new_modal.class_role_select.options
+    )
+    assert (
+        new_modal.class_role_select.required
+        and new_modal.class_role_select.min_values == 1
+    )
 
 
 async def test_roster_and_picker_paginate_more_than_25_characters(
@@ -617,6 +658,15 @@ async def test_modal_to_main_switch_to_replacement_removal_with_real_storage(
 
     bot = ClassBot(settings, store, Redactor())
     await bot.roles.reconcile(guild)
+    mapping = await store.roles(guild.id)
+    # Preserve server grouping and class colors as well as role assignments.
+    roles_by_id = {role.id: role for role in guild.roles}
+    roles_by_id[mapping["paladin"]].hoist = True
+    roles_by_id[mapping["warrior"]].hoist = True
+    class_appearance = {
+        role_id: (roles_by_id[role_id].colour.value, roles_by_id[role_id].hoist)
+        for role_id in mapping.values()
+    }
     unrelated = FakeRole(77777, "Guild Rank")
     guild.roles.append(unrelated)
     member = guild.member(roles=[unrelated])
@@ -625,14 +675,10 @@ async def test_modal_to_main_switch_to_replacement_removal_with_real_storage(
     async def register(primary, secondary, class_id):
         modal = CharacterModal(ui, guild.id, member.id)
         modal.primary._value, modal.secondary._value = primary, secondary
-        modal.class_select._values = [class_id]
+        modal.class_role_select._values = [f"{class_id}:tank"]
         call = interaction(guild, member)
         await modal.on_submit(call)
-        picker = call.followup.send.call_args.kwargs["view"]
-        selected = interaction(guild, member)
-        selected.data = {"values": ["tank"]}
-        await picker.selected(selected)
-        return selected.followup.send.call_args.kwargs["content"]
+        return call.followup.send.call_args.kwargs["content"]
 
     assert "registered as your main Paladin" in await register(
         "John", "Stormwind", "paladin"
@@ -691,6 +737,14 @@ async def test_modal_to_main_switch_to_replacement_removal_with_real_storage(
         tags["tank"],
     }
     assert await bot.characters.records.pending(guild.id, member.id) is None
+    assert {
+        role_id: (roles_by_id[role_id].colour.value, roles_by_id[role_id].hoist)
+        for role_id in mapping.values()
+    } == class_appearance
+    assert all(
+        roles_by_id[role_id].colour.value == 0 and not roles_by_id[role_id].hoist
+        for role_id in tags.values()
+    )
 
 
 async def test_maximum_name_lengths_fit_roster_and_guild_embed(

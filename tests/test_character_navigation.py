@@ -1,6 +1,7 @@
 """Regression coverage for one private message across character workflows."""
 
 import asyncio
+from dataclasses import replace
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -138,14 +139,16 @@ async def test_modal_submission_uses_its_source_message_when_available(
     old = dashboard(ui, guild, [])
     modal = CharacterModal(ui, guild.id, 456)
     modal.primary._value, modal.secondary._value = "John", "Stormwind"
-    modal.class_select._values = ["paladin"]
+    modal.class_role_select._values = ["paladin:healing"]
     ui.manager.roster.return_value = roster(character(main=True))
     call = component(guild)
     call.type = discord.InteractionType.modal_submit
     if not from_private_message:
         call.message = None
     await modal.on_submit(call)
-    ui.manager.add.assert_not_called()
+    ui.manager.add.assert_awaited_once_with(
+        guild, 456, "John", "Stormwind", "paladin", "healing"
+    )
     call.response.defer.assert_awaited_once_with(
         ephemeral=True, thinking=not from_private_message
     )
@@ -159,28 +162,21 @@ async def test_modal_submission_uses_its_source_message_when_available(
         response = call.followup.send.call_args.kwargs
         assert response["ephemeral"]
         assert not old.is_finished()
-    assert "Choose a gameplay role" in response["content"]
-    selected = (
-        component(guild) if from_private_message else interaction(guild, call.user)
-    )
-    selected.data = {"values": ["healing"]}
-    await response["view"].selected(selected)
-    ui.manager.add.assert_awaited_once_with(
-        guild, 456, "John", "Stormwind", "paladin", "healing"
-    )
-    saved = (
-        selected.edit_original_response.call_args.kwargs
-        if from_private_message
-        else selected.followup.send.call_args.kwargs
-    )
-    assert "registered as your main Paladin" in saved["content"]
-    assert saved["view"].character_select.options[0].default
+    assert "registered as your main Paladin" in response["content"]
+    assert response["view"].character_select.options[0].default
 
 
 async def test_selection_only_browses_until_make_main_is_clicked(
     character_controller, guild
 ):
     ui = character_controller
+    ui.settings = replace(
+        ui.settings,
+        classes=tuple(
+            replace(entry, color=0x123456) if entry.id == "warrior" else entry
+            for entry in ui.settings.classes
+        ),
+    )
     john = character(main=True)
     sam = character(2, primary="Sam", secondary="Ironforge", class_id="warrior")
     old = dashboard(ui, guild, [john, sam])
@@ -191,6 +187,9 @@ async def test_selection_only_browses_until_make_main_is_clicked(
     ui.manager.promote.assert_not_called()
     ui.manager.roster.assert_awaited_once_with(guild, 456, reconcile=False)
     selected_view = select.edit_original_response.call_args.kwargs["view"]
+    assert (
+        select.edit_original_response.call_args.kwargs["embed"].colour.value == 0x123456
+    )
     assert selected_view.selected.id == 2
     assert old.is_finished()
     ui.manager.roster.reset_mock()
@@ -209,7 +208,7 @@ async def test_selection_only_browses_until_make_main_is_clicked(
     response = call.edit_original_response.call_args.kwargs
     assert "John Stormwind is now an alt" in response["content"]
     assert (
-        "Sam Ironforge**\nWarrior • Role not set • Main"
+        "Sam Ironforge**\nWarrior • Role not set • ⭐ Main"
         in response["embed"].description
     )
     assert (
@@ -361,7 +360,7 @@ async def test_removing_last_character_returns_empty_dashboard(
     ui.manager.remove.assert_awaited_once_with(guild, 456, john.id, replacement_id=None)
     response = call.edit_original_response.call_args.kwargs
     assert response["content"] == "Character removed."
-    assert "Start with Add Character" in response["embed"].description
+    assert "Start with **Add Character**" in response["embed"].description
     assert isinstance(response["view"], RosterView)
     assert not any(
         isinstance(item, discord.ui.Select) for item in response["view"].children

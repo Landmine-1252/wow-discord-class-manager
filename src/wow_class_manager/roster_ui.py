@@ -6,8 +6,14 @@ from typing import TYPE_CHECKING
 
 import discord
 
-from .character_roles import role_name
-from .character_ui import OwnedView, class_name, page_slice, safe_text
+from .character_ui import (
+    OwnedView,
+    class_color,
+    class_name,
+    page_slice,
+    role_badge,
+    safe_text,
+)
 from .roles import UserError
 
 if TYPE_CHECKING:
@@ -99,9 +105,9 @@ async def show_guild_roster(
         f"**{count_label(len(characters), 'character')}** • {count_label(mains, 'main')} • {count_label(alts, 'alt')} • {count_label(members, 'member')}",
     ]
     for character in entries:
-        designation = "Main" if character.is_main else "Alt"
+        designation = "⭐ Main" if character.is_main else "Alt"
         lines.append(
-            f"**{safe_text(character.full_name, 110)}** | {class_name(character.class_id)} | {role_name(character.gameplay_role)} | {designation}\n"
+            f"**{safe_text(character.full_name, 110)}** | {class_name(character.class_id)} | {role_badge(character.gameplay_role)} | {designation}\n"
             f"Owned by {owner_label(guild, character.user_id)}"
         )
     if not entries:
@@ -112,7 +118,7 @@ async def show_guild_roster(
     embed = discord.Embed(
         title=f"Guild {class_filter} Roster" if class_id else "Guild Character Roster",
         description="\n\n".join(lines),
-        colour=controller.settings.panel_accent_color,
+        colour=class_color(controller.settings, class_id),
     )
     embed.set_footer(
         text=f"Page {selected_page + 1}/{pages} • {len(characters)} characters • Done closes this menu • Auto-closes after 5 minutes idle"

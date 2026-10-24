@@ -16,13 +16,14 @@ import discord
 
 from .character_names import normalized_name_key, validate_names
 from .character_roles import role_name, validate_gameplay_role
-from .classes import GAMEPLAY_ROLES, REGISTRY
+from .classes import GAMEPLAY_ROLE_EMOJIS, GAMEPLAY_ROLE_TAGS, GAMEPLAY_ROLES, REGISTRY
 from .roles import UserError, require_bot_member, require_guild
 from .storage import StorageError
 
 if TYPE_CHECKING:
     from .character_store import Character, Roster
     from .commands import Controller
+    from .config import Settings
 
 MANAGE_ID = "wow:character:manage:v1"
 MY_CHARACTERS_ID = "wow:character:list:v1"
@@ -32,6 +33,13 @@ PRIVATE_TIMEOUT = 300
 log = logging.getLogger(__name__)
 
 type SessionKey = tuple[int, int, int | None]
+type CharacterDraft = tuple[str, str, str, str | None]
+
+ROLE_DESCRIPTIONS = {
+    "dps": "Deal damage",
+    "healing": "Restore health and support your allies",
+    "tank": "Protect your allies and hold the enemy's attention",
+}
 
 
 def safe_text(value: str, limit: int = 100) -> str:
@@ -52,6 +60,20 @@ def class_name(class_id: str) -> str:
     return definition.name if definition else "Unavailable class"
 
 
+def class_color(settings: Settings, class_id: str | None) -> int:
+    configured = next(
+        (entry for entry in settings.classes if entry.id == class_id), None
+    )
+    if configured is not None:
+        return configured.color
+    definition = REGISTRY.get(class_id)
+    return definition.color if definition else settings.panel_accent_color
+
+
+def role_badge(gameplay_role: str | None) -> str:
+    return GAMEPLAY_ROLE_TAGS.get(gameplay_role, "Role not set")
+
+
 def page_slice[T](items: Sequence[T], requested: int) -> tuple[Sequence[T], int, int]:
     pages = max(1, math.ceil(len(items) / PAGE_SIZE))
     page = max(0, min(requested, pages - 1))
@@ -65,6 +87,7 @@ def character_options(
         discord.SelectOption(
             label=safe_text(entry.full_name, 100),
             value=str(entry.id),
+            emoji=GAMEPLAY_ROLE_EMOJIS.get(entry.gameplay_role),
             default=default_main and entry.is_main,
             description=(
                 f"{class_name(entry.class_id)} | {role_name(entry.gameplay_role)} | {'Current Main' if entry.is_main else 'Alt'}"
@@ -90,6 +113,7 @@ class CharacterView(discord.ui.View):
             label="My Characters",
             custom_id=MANAGE_ID,
             style=discord.ButtonStyle.primary,
+            emoji="🧙",
         )
         manage.callback = self.manage
         self.add_item(manage)
@@ -99,6 +123,7 @@ class CharacterView(discord.ui.View):
                 label="My Characters",
                 custom_id=MY_CHARACTERS_ID,
                 style=discord.ButtonStyle.secondary,
+                emoji="🧙",
             )
             mine.callback = self.mine
             self.add_item(mine)
@@ -110,6 +135,7 @@ class CharacterView(discord.ui.View):
                 label="Community Roster",
                 custom_id=COMMUNITY_ROSTER_ID,
                 style=discord.ButtonStyle.secondary,
+                emoji="👥",
             )
             browse.callback = self.browse
             self.add_item(browse)
@@ -431,7 +457,7 @@ class CharacterController:
         )
         lines = (
             [
-                "Choose a character, then choose what to do. Your main sets your class color and gameplay tag."
+                "Choose a character to preview it. **Make Main** sets your Discord class color and gameplay tag."
             ]
             if entries
             else []
@@ -439,14 +465,14 @@ class CharacterController:
         if warning:
             lines.append(safe_text(warning, 700) + "\n")
         for character in entries:
-            designation = "Main" if character.is_main else "Alt"
+            designation = "⭐ Main" if character.is_main else "Alt"
             completion = " • Name incomplete" if character.needs_completion else ""
             lines.append(
-                f"**{safe_text(character.full_name, 110)}**\n{class_name(character.class_id)} • {role_name(character.gameplay_role)} • {designation}{completion}"
+                f"**{safe_text(character.full_name, 110)}**\n{class_name(character.class_id)} • {role_badge(character.gameplay_role)} • {designation}{completion}"
             )
         if not entries:
             lines.append(
-                "Start with Add Character below. Enter both name parts, choose a class, then choose a gameplay role to save. Your first character becomes your main and sets your class color and gameplay tag. You can add alts or change your plans later."
+                "Start with **Add Character** below. Enter both name parts and choose **Class & Role**, then submit to save. Your first character becomes your main and sets your class color and gameplay tag.\n\n⚔️ **DPS** · Deal damage\n💚 **Healing** · Support your allies\n🛡️ **Tank** · Protect your allies"
             )
         elif roster.main is None:
             lines.append(
@@ -461,13 +487,13 @@ class CharacterController:
         embed = discord.Embed(
             title="Your Characters",
             description="\n\n".join(lines),
-            colour=self.settings.panel_accent_color,
+            colour=class_color(self.settings, selected.class_id if selected else None),
         )
         embed.set_footer(
             text=f"Page {page + 1}/{pages} • {len(ordered)} character{'s' if len(ordered) != 1 else ''} • Closes after 5 minutes idle"
         )
         if selected:
-            detail = f"{safe_text(selected.full_name, 110)} • {class_name(selected.class_id)} • {role_name(selected.gameplay_role)} • {'Main' if selected.is_main else 'Alt'}"
+            detail = f"**{safe_text(selected.full_name, 110)}**\n{class_name(selected.class_id)} • {role_badge(selected.gameplay_role)} • {'⭐ Main' if selected.is_main else 'Alt'}"
             if selected.gameplay_role is None:
                 detail += (
                     "\nUse Edit to choose DPS, Healing or Tank for this character."
@@ -490,7 +516,7 @@ class CharacterController:
         if roster.main is not None and page > 0:
             embed.add_field(
                 name="Current Main",
-                value=f"{safe_text(roster.main.full_name, 110)} • {class_name(roster.main.class_id)} • {role_name(roster.main.gameplay_role)}",
+                value=f"⭐ {safe_text(roster.main.full_name, 110)} • {class_name(roster.main.class_id)} • {role_badge(roster.main.gameplay_role)}",
                 inline=False,
             )
         await self.send(
@@ -523,7 +549,7 @@ class CharacterController:
         interaction: discord.Interaction,
         error: UserError,
         character: Character | None,
-        draft: tuple[str, str, str],
+        draft: CharacterDraft,
     ) -> None:
         async def retry(message: str) -> None:
             await self.send(
@@ -683,7 +709,7 @@ class CharacterController:
             root = self.settings.character_command_root
             await self.send(
                 interaction,
-                content=f"Open My Characters to add a character or select one to Edit, Make Main or Remove. Enter a First Name, Secondary Name and class, then choose a gameplay role to save. Only roles supported by that class are offered: DPS, Healing or Tank. Your first character becomes main; later characters become alts.\n`/{root} main` switches mains and automatically makes the previous main an alt. Your main sets your Discord class color and a ⚔️ DPS, 💚 Healing or 🛡️ Tank role tag. Click a member's name or avatar in this server to see their tag in their profile; no boosts or Nitro needed. Gameplay roles also appear in the roster. Use Edit to change a role or complete an older character's role.\n`/{root} list`, `/{root} edit` and `/{root} remove` also open private workflows. Removal always asks for confirmation.\nDone closes your menu; inactive menus close after five minutes. Names and ownership are self-reported; registration does not verify game availability or ownership.",
+                content=f"Open My Characters to add a character or select one to Edit, Make Main or Remove. Enter a First Name and Secondary Name, then choose **Class & Role** in the same form. Choices stay grouped by class and show only supported roles: ⚔️ DPS, 💚 Healing or 🛡️ Tank. Submit once to save. Your first character becomes main; later characters become alts.\n`/{root} main` switches mains and automatically makes the previous main an alt. Your main sets your Discord class color and a ⚔️ DPS, 💚 Healing or 🛡️ Tank role tag. Click a member's name or avatar in this server to see their tag in their profile; no boosts or Nitro needed. Gameplay roles also appear in the roster. Use Edit to change a role or complete an older character's role.\n`/{root} list`, `/{root} edit` and `/{root} remove` also open private workflows. Removal always asks for confirmation.\nDone closes your menu; inactive menus close after five minutes. Names and ownership are self-reported; registration does not verify game availability or ownership.",
                 view=BackView(self, guild.id, interaction.user.id),
             )
 
@@ -847,8 +873,11 @@ class OwnedView(discord.ui.View):
         row: int = 0,
         style: discord.ButtonStyle = discord.ButtonStyle.secondary,
         disabled: bool = False,
+        emoji: str | None = None,
     ) -> None:
-        button = discord.ui.Button(label=label, row=row, style=style, disabled=disabled)
+        button = discord.ui.Button(
+            label=label, row=row, style=style, disabled=disabled, emoji=emoji
+        )
         button.callback = callback
         self.add_item(button)
 
@@ -898,11 +927,13 @@ class RosterView(OwnedView):
         if self.selected is not None:
             # Compact labels keep the selected character's actions on one row
             # on mobile. Destructive styling is reserved for confirmation.
-            self.button("Edit", self.edit, row=1)
+            self.button("Edit", self.edit, row=1, emoji="✏️")
             self.button(
                 "Make Main",
                 self.main,
                 row=1,
+                style=discord.ButtonStyle.success,
+                emoji="⭐",
                 disabled=(
                     self.selected.is_main
                     or self.selected.needs_completion
@@ -926,6 +957,7 @@ class RosterView(OwnedView):
             row=2,
             style=discord.ButtonStyle.primary,
             disabled=not can_add,
+            emoji="➕",
         )
         if pages > 1:
             self.button("Previous", self.previous, row=3, disabled=page == 0)
@@ -936,7 +968,7 @@ class RosterView(OwnedView):
             controller.settings.enable_guild_roster
             and controller.settings.roster_visibility != "disabled"
         ):
-            self.button("Community Roster", self.browse, row=2)
+            self.button("Community Roster", self.browse, row=2, emoji="👥")
 
     async def add(self, interaction: discord.Interaction) -> None:
         async def show(guild: discord.Guild) -> None:
@@ -1044,7 +1076,7 @@ class CharacterModal(discord.ui.Modal):
         character: Character | None = None,
         *,
         source_view: OwnedView | None = None,
-        draft: tuple[str, str, str] | None = None,
+        draft: CharacterDraft | None = None,
     ):
         super().__init__(
             title="Edit Character" if character else "Add Character",
@@ -1119,68 +1151,89 @@ class CharacterModal(discord.ui.Modal):
             self.secondary.default = (
                 draft[1] if len(draft[1]) <= self.secondary.max_length else None
             )
-        self.class_select: discord.ui.Select | None = None
-        if character is None or settings.allow_character_class_edit:
-            keep_saved_class = character is not None and character.class_id not in {
-                entry.id for entry in settings.classes
-            }
-            options = [
-                discord.SelectOption(
-                    label=entry.definition.name,
-                    value=entry.id,
-                    default=(
-                        draft[2] == entry.id
-                        if draft is not None
-                        else character is not None and character.class_id == entry.id
-                    ),
-                )
-                for entry in settings.display_classes
-            ]
-            self.class_select = discord.ui.Select(
-                custom_id="class_id",
-                placeholder=(
-                    "Keep saved class or choose an enabled class"
-                    if keep_saved_class
-                    else "Choose the character's class"
-                ),
-                options=options,
-                min_values=0 if keep_saved_class else 1,
-                max_values=1,
-                required=not keep_saved_class,
+        fixed_class = character is not None and not settings.allow_character_class_edit
+        available = (
+            {}
+            if fixed_class
+            else {entry.id: entry.definition for entry in settings.display_classes}
+        )
+        # Keep a saved, disabled class available only to its existing character.
+        # It still cannot be chosen by a new character or used to change mains.
+        if character is not None and character.class_id in REGISTRY:
+            available[character.class_id] = REGISTRY[character.class_id]
+        if not available:
+            raise UserError(
+                "This character's saved class is unavailable. Ask an admin to enable character class editing."
             )
-            self.add_item(
-                discord.ui.Label(
-                    text="Class",
-                    component=self.class_select,
-                    description=(
-                        "Leave blank to keep this character's saved class."
-                        if keep_saved_class
-                        else None
-                    ),
-                )
-            )
-
-    async def on_submit(self, interaction: discord.Interaction) -> None:
-        primary, secondary = self.primary.value, self.secondary.value
-        values = self.class_select.values if self.class_select is not None else []
-        class_id = (
-            values[0]
-            if len(values) == 1
+        saved_pair = (
+            (draft[2], draft[3])
+            if draft is not None
             else (
-                self.character.class_id
-                if self.character
-                and (self.class_select is None or not self.class_select.required)
-                else ""
+                (character.class_id, character.gameplay_role)
+                if character
+                else (None, None)
+            )
+        )
+        enabled = {entry.id for entry in settings.classes}
+        options = [
+            discord.SelectOption(
+                label=f"{entry.name} · {GAMEPLAY_ROLES[role]}",
+                value=f"{entry.id}:{role}",
+                emoji=GAMEPLAY_ROLE_EMOJIS[role],
+                description=(
+                    f"Saved class · {ROLE_DESCRIPTIONS[role]}"
+                    if entry.id not in enabled
+                    else ROLE_DESCRIPTIONS[role]
+                ),
+                default=(entry.id, role) == saved_pair,
+            )
+            for entry in sorted(
+                available.values(), key=lambda entry: entry.name.casefold()
+            )
+            for role in entry.gameplay_roles
+        ]
+        self.class_role_select = discord.ui.Select(
+            # Retain the existing component ID for each editing policy.
+            custom_id="wow:character:gameplay-role:v1" if fixed_class else "class_id",
+            placeholder="Choose your class and role",
+            options=options,
+            min_values=1,
+            max_values=1,
+            required=True,
+        )
+        self.add_item(
+            discord.ui.Label(
+                text="Class & Role",
+                description=(
+                    "Your class is fixed. Choose how this character plays."
+                    if fixed_class
+                    else "Grouped by class. Only supported roles are shown."
+                ),
+                component=self.class_role_select,
             )
         )
 
-        async def choose_role(guild: discord.Guild) -> None:
-            if self.source_view is not None and self.source_view.is_finished():
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        primary, secondary = self.primary.value, self.secondary.value
+        values = self.class_role_select.values
+        choice = values[0] if len(values) == 1 else ""
+        class_id, separator, role = choice.partition(":")
+        gameplay_role = role or None
+        draft = (primary, secondary, class_id, gameplay_role)
+
+        async def save(guild: discord.Guild) -> None:
+            if self.is_finished() or (
+                self.source_view is not None and self.source_view.is_finished()
+            ):
                 raise UserError(
                     "This menu has closed or changed. Reopen My Characters to try again."
                 )
             try:
                 validate_names(self.controller.settings, primary, secondary)
+                if not separator or not class_id or not gameplay_role:
+                    raise UserError(
+                        "Choose a class and role from the Class & Role list."
+                    )
                 if class_id not in REGISTRY:
                     raise UserError("Choose a recognized character class.")
                 if self.character is None or class_id != self.character.class_id:
@@ -1193,110 +1246,6 @@ class CharacterModal(discord.ui.Modal):
                         entry.id for entry in self.controller.settings.classes
                     }:
                         raise UserError("Choose an enabled character class.")
-                view = CharacterRolePicker(
-                    self.controller,
-                    guild.id,
-                    self.owner_id,
-                    self.character,
-                    (primary, secondary, class_id),
-                )
-                current = (
-                    f"\nCurrent role: {role_name(self.character.gameplay_role)}."
-                    if self.character
-                    else ""
-                )
-                await self.controller.send(
-                    interaction,
-                    content=(
-                        f"**{safe_text(primary + ' ' + secondary, 110)}** • {class_name(class_id)}{current}\n"
-                        "Choose a gameplay role below to save this character. Only roles supported by this class are shown."
-                    ),
-                    view=view,
-                )
-            except UserError as error:
-                await self.controller.retry_character(
-                    interaction,
-                    error,
-                    self.character,
-                    (primary, secondary, class_id),
-                )
-
-        await self.controller.execute(
-            interaction, choose_role, owner_id=self.owner_id, guild_id=self.guild_id
-        )
-
-    async def on_error(
-        self, interaction: discord.Interaction, error: Exception
-    ) -> None:
-        await self.controller.controller.handle_error(
-            interaction, error, action="character"
-        )
-
-
-class RetryCharacterView(OwnedView):
-    def __init__(
-        self,
-        controller: CharacterController,
-        guild_id: int,
-        owner_id: int,
-        character: Character | None,
-        draft: tuple[str, str, str],
-    ):
-        super().__init__(controller, guild_id, owner_id)
-        self.character, self.draft = character, draft
-        self.button("Edit Details", self.retry, style=discord.ButtonStyle.primary)
-        self.button("Back to Characters", self.back)
-
-    async def retry(self, interaction: discord.Interaction) -> None:
-        async def show(guild: discord.Guild) -> None:
-            await interaction.response.send_modal(
-                CharacterModal(
-                    self.controller,
-                    guild.id,
-                    self.owner_id,
-                    self.character,
-                    source_view=self,
-                    draft=self.draft,
-                )
-            )
-
-        await self.run(interaction, show, defer=False)
-
-
-class CharacterRolePicker(RetryCharacterView):
-    """Choose only compatible roles after the modal has established the class."""
-
-    def __init__(
-        self,
-        controller: CharacterController,
-        guild_id: int,
-        owner_id: int,
-        character: Character | None,
-        draft: tuple[str, str, str],
-    ):
-        super().__init__(controller, guild_id, owner_id, character, draft)
-        self.select = discord.ui.Select(
-            custom_id="wow:character:gameplay-role:v1",
-            placeholder="Choose a role to save this character",
-            options=[
-                discord.SelectOption(label=GAMEPLAY_ROLES[role], value=role)
-                for role in REGISTRY[draft[2]].gameplay_roles
-            ],
-            row=1,
-        )
-        self.select.callback = self.selected
-        self.add_item(self.select)
-
-    async def selected(self, interaction: discord.Interaction) -> None:
-        async def save(guild: discord.Guild) -> None:
-            if self.is_finished():
-                raise UserError(
-                    "This menu has closed or changed. Reopen My Characters."
-                )
-            primary, secondary, class_id = self.draft
-            values = (interaction.data or {}).get("values", [])
-            gameplay_role = values[0] if len(values) == 1 else None
-            try:
                 validate_gameplay_role(class_id, gameplay_role)
                 if self.character:
                     notice = await self.controller.manager.edit(
@@ -1320,7 +1269,7 @@ class CharacterRolePicker(RetryCharacterView):
                     )
             except UserError as error:
                 await self.controller.retry_character(
-                    interaction, error, self.character, self.draft
+                    interaction, error, self.character, draft
                 )
                 return
             self.stop()
@@ -1333,7 +1282,46 @@ class CharacterRolePicker(RetryCharacterView):
                 ),
             )
 
-        await self.run(interaction, save)
+        await self.controller.execute(
+            interaction, save, owner_id=self.owner_id, guild_id=self.guild_id
+        )
+
+    async def on_error(
+        self, interaction: discord.Interaction, error: Exception
+    ) -> None:
+        await self.controller.controller.handle_error(
+            interaction, error, action="character"
+        )
+
+
+class RetryCharacterView(OwnedView):
+    def __init__(
+        self,
+        controller: CharacterController,
+        guild_id: int,
+        owner_id: int,
+        character: Character | None,
+        draft: CharacterDraft,
+    ):
+        super().__init__(controller, guild_id, owner_id)
+        self.character, self.draft = character, draft
+        self.button("Edit Details", self.retry, style=discord.ButtonStyle.primary)
+        self.button("Back to Characters", self.back)
+
+    async def retry(self, interaction: discord.Interaction) -> None:
+        async def show(guild: discord.Guild) -> None:
+            await interaction.response.send_modal(
+                CharacterModal(
+                    self.controller,
+                    guild.id,
+                    self.owner_id,
+                    self.character,
+                    source_view=self,
+                    draft=self.draft,
+                )
+            )
+
+        await self.run(interaction, show, defer=False)
 
 
 class EditLauncher(OwnedView):
